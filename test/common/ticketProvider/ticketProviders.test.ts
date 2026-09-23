@@ -1093,3 +1093,44 @@ describe('JiraProvider attachments and labels', () => {
     expect(received).to.deep.equal({ issueIdOrKey: 'ACME-123', update: { labels: [{ add: 'backlog-autopilot' }] } });
   }));
 });
+
+describe('JiraProvider.addTicketComment', () => {
+  function recordingJira(): { provider: JiraProvider; posted: any[] } {
+    const posted: any[] = [];
+    const provider = stubbedJira({
+      issueComments: {
+        addComment: async (parameters: any) => {
+          posted.push(parameters);
+          return { id: '10233' };
+        },
+      },
+    });
+    return { provider, posted };
+  }
+
+  it('posts ADF on Jira Cloud and returns the comment id', withEnv(JIRA_ENV, async () => {
+    const { provider, posted } = recordingJira();
+    const result = await provider.addTicketComment('ACME-123', 'Status: estimated\n\nSee attachment');
+    expect(result).to.deep.equal({ commentId: '10233' });
+    expect(posted[0].issueIdOrKey).to.equal('ACME-123');
+    expect(posted[0].comment.type).to.equal('doc');
+    expect(posted[0].comment.content).to.have.length(2);
+  }));
+
+  it('posts the text as is on Jira Server / Data Center', withEnv({ ...JIRA_ENV, JIRA_HOST: 'https://jira.acme.com' }, async () => {
+    const { provider, posted } = recordingJira();
+    await provider.addTicketComment('ACME-123', 'Plain text');
+    expect(posted[0].comment).to.equal('Plain text');
+  }));
+
+  it('names an unknown ticket TicketNotFound', withEnv(JIRA_ENV, async () => {
+    const provider = stubbedJira({
+      issueComments: {
+        addComment: async () => {
+          throw jiraHttpError(404);
+        },
+      },
+    });
+    expect((await rejectionOf(provider.addTicketComment('ACME-999', 'text'))).name).to.equal('TicketNotFound');
+  }));
+});

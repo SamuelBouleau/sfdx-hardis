@@ -31,6 +31,7 @@ import {
   TicketSearchResult,
   TicketSummary,
   TicketUploadFile,
+  buildJiraCommentAdf,
   toIsoDateTime,
   toTicketError,
 } from "./ticketOperations.js";
@@ -753,6 +754,20 @@ export class JiraProvider extends TicketProviderRoot {
     await this.runTicketOperation({ operation: "label", ticketId: issueKey }, (client) =>
       client.issues.editIssue({ issueIdOrKey: issueKey, update: { labels: [{ add: label }] } })
     );
+  }
+
+  /**
+   * Free-text comment, independent from the deployment comment. ADF on Jira Cloud (REST v3), text as
+   * is on Server / Data Center (REST v2), the same split as the deployment comments. No duplicate
+   * guard: the caller makes the run idempotent with the label it adds.
+   */
+  public async addTicketComment(ticketId: string, body: string): Promise<{ commentId: string }> {
+    const issueKey = (ticketId || "").trim().toUpperCase();
+    const comment: any = this.isJiraCloud() ? buildJiraCommentAdf(body) : body;
+    const posted: any = await this.runTicketOperation({ operation: "comment", ticketId: issueKey }, (client) =>
+      client.issueComments.addComment({ issueIdOrKey: issueKey, comment })
+    );
+    return { commentId: String(posted?.id ?? "") };
   }
 
   public async postDeploymentComments(tickets: Ticket[], org: string, pullRequestInfo: CommonPullRequestInfo | null): Promise<Ticket[]> {
