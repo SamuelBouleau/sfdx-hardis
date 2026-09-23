@@ -919,6 +919,62 @@ describe('JiraProvider.searchTickets', () => {
     const provider = new JiraProvider({});
     expect((await rejectionOf(provider.searchTickets('project = ACME', { maxResults: 50 }))).name).to.equal('TicketProviderNotConfigured');
   }));
+
+  it('refuses a maxResults that is not a positive integer, without calling JIRA', withEnv(JIRA_ENV, async () => {
+    let called = false;
+    const provider = stubbedJira({
+      issueSearch: {
+        searchForIssuesUsingJqlEnhancedSearchPost: async () => {
+          called = true;
+          return { issues: [] };
+        },
+      },
+    });
+    const error = await rejectionOf(provider.searchTickets('project = ACME', { maxResults: 0 }));
+    expect(error.message).to.contain('maxResults must be a positive integer');
+    expect(called).to.equal(false);
+  }));
+
+  it('stops on an empty page even when it carries a cursor', withEnv(JIRA_ENV, async () => {
+    let calls = 0;
+    const provider = stubbedJira({
+      issueSearch: {
+        searchForIssuesUsingJqlEnhancedSearchPost: async () => {
+          calls++;
+          return { issues: [], nextPageToken: 'cursor-that-leads-nowhere' };
+        },
+      },
+    });
+    const result = await provider.searchTickets('project = ACME', { maxResults: 50 });
+    expect(calls).to.equal(1);
+    expect(result.tickets).to.deep.equal([]);
+    expect(result.nextPageToken).to.equal(null);
+    expect(result.truncated).to.equal(false);
+  }));
+
+  it('names a 401 on the last credential TicketProviderNotConfigured', withEnv(JIRA_ENV, async () => {
+    const provider = stubbedJira({
+      issueSearch: {
+        searchForIssuesUsingJqlEnhancedSearchPost: async () => {
+          throw jiraHttpError(401);
+        },
+      },
+    });
+    // No fallback credential: a 401 must never reach a real client and the network
+    (provider as any).nextAuths = [];
+    expect((await rejectionOf(provider.searchTickets('project = ACME', { maxResults: 50 }))).name).to.equal('TicketProviderNotConfigured');
+  }));
+
+  it('skips an issue returned without a key', withEnv(JIRA_ENV, async () => {
+    const provider = stubbedJira({
+      issueSearch: {
+        searchForIssuesUsingJqlEnhancedSearchPost: async () => ({ issues: [{ fields: { summary: 'No key' } }, jiraIssue('ACME-2')] }),
+      },
+    });
+    const result = await provider.searchTickets('project = ACME', { maxResults: 50 });
+    expect(result.tickets.map((ticket) => ticket.id)).to.deep.equal(['ACME-2']);
+    expect(result.tickets.some((ticket) => ticket.url.endsWith('/browse/undefined'))).to.equal(false);
+  }));
 });
 
 describe('JiraProvider attachments and labels', () => {

@@ -173,7 +173,7 @@ export class JiraProvider extends TicketProviderRoot {
     for (;;) {
       const client = await this.getJiraClient();
       if (!client) {
-        throw new SfError("No JIRA credential left to try");
+        throw new SfError("No JIRA credential left to try", TICKET_ERROR.providerNotConfigured);
       }
       try {
         const result = await call(client as Version2Client);
@@ -663,9 +663,10 @@ export class JiraProvider extends TicketProviderRoot {
 
   private toTicketSummary(issue: any): TicketSummary {
     const fields = issue?.fields || {};
+    const key = issue?.key || "";
     return {
-      id: issue.key,
-      url: `${this.jiraHost}/browse/${issue.key}`,
+      id: key,
+      url: `${this.jiraHost}/browse/${key}`,
       subject: fields.summary || "",
       type: fields.issuetype?.name || "",
       status: fields.status?.name || "",
@@ -683,6 +684,10 @@ export class JiraProvider extends TicketProviderRoot {
    * Never fetches more than options.maxResults issues.
    */
   public async searchTickets(query: string, options: TicketSearchOptions): Promise<TicketSearchResult> {
+    // Programming error only: the CLI flag already enforces a minimum of 1
+    if (!Number.isInteger(options.maxResults) || options.maxResults < 1) {
+      throw new SfError(`maxResults must be a positive integer, got ${options.maxResults}`);
+    }
     if (!(await this.getJiraClient())) {
       throw new SfError(t('ticketProviderNoCredential', { provider: JiraProvider.providerLabel }), TICKET_ERROR.providerNotConfigured);
     }
@@ -703,9 +708,14 @@ export class JiraProvider extends TicketProviderRoot {
         })
       );
       const issues: any[] = page?.issues || [];
-      tickets.push(...issues.map((issue) => this.toTicketSummary(issue)));
+      // An empty page ends the search: relaying its cursor would make a caller loop on empty pages
+      if (issues.length === 0) {
+        pageToken = null;
+        break;
+      }
+      tickets.push(...issues.filter((issue) => issue?.key).map((issue) => this.toTicketSummary(issue)));
       pageToken = page?.nextPageToken || null;
-      if (!pageToken || issues.length === 0 || tickets.length >= options.maxResults) {
+      if (!pageToken || tickets.length >= options.maxResults) {
         break;
       }
     }
