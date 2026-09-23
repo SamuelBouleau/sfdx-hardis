@@ -690,6 +690,22 @@ const JIRA_ENV = {
 };
 
 describe('TicketProvider.resolveProvider', () => {
+  // Azure's autoDetectFromGitRemote may write these while a test runs; withEnv only restores the keys it was given
+  const AZURE_DETECTED_KEYS = ['SYSTEM_COLLECTIONURI', 'SYSTEM_TEAMPROJECT'];
+  let detectedSnapshot: Record<string, string | undefined> = {};
+  beforeEach(() => {
+    detectedSnapshot = Object.fromEntries(AZURE_DETECTED_KEYS.map((key) => [key, process.env[key]]));
+  });
+  afterEach(() => {
+    for (const [key, value] of Object.entries(detectedSnapshot)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  });
+
   it('returns the JIRA connector for a JIRA key', withEnv(JIRA_ENV, async () => {
     const { provider, providerClass } = await TicketProvider.resolveProvider({ ticketId: 'ACME-123' });
     expect(providerClass.providerKey).to.equal('jira');
@@ -727,10 +743,45 @@ describe('TicketProvider.resolveProvider', () => {
     expect(providerClass.providerKey).to.equal('jira');
   }));
 
-  it('asks for --provider when several providers are configured', withEnv({ ...JIRA_ENV, ...SERVICENOW_ENV }, async () => {
-    const error = await rejectionOf(TicketProvider.resolveProvider({}));
+  it('asks for --provider when several providers are configured', withEnv(
+    {
+      ...JIRA_ENV,
+      ...SERVICENOW_ENV,
+      SYSTEM_COLLECTIONURI: '',
+      SYSTEM_TEAMPROJECT: '',
+      CI_SFDX_HARDIS_AZURE_TOKEN: '',
+      SYSTEM_ACCESSTOKEN: '',
+      AZURE_DEVOPS_EXT_PAT: '',
+    },
+    async () => {
+      const error = await rejectionOf(TicketProvider.resolveProvider({}));
+      expect(error.name).to.equal('TicketProviderNotConfigured');
+      expect(error.message).to.contain('--provider');
+    }
+  ));
+
+  it('keeps the id-based message when the connector of an identifier is not configured', withEnv(NO_JIRA_ENV, async () => {
+    const error = await rejectionOf(TicketProvider.resolveProvider({ ticketId: 'ACME-123' }));
     expect(error.name).to.equal('TicketProviderNotConfigured');
-    expect(error.message).to.contain('--provider');
+    expect(error.message).to.contain('ACME-123');
+  }));
+});
+
+describe('TicketProvider.getTicketDetails', () => {
+  it('refuses a blank identifier without selecting a provider', withEnv(JIRA_ENV, async () => {
+    const originalResolve = TicketProvider.resolveProvider;
+    let resolved = false;
+    TicketProvider.resolveProvider = async (...args: Parameters<typeof originalResolve>) => {
+      resolved = true;
+      return originalResolve.apply(TicketProvider, args);
+    };
+    try {
+      const error = await rejectionOf(TicketProvider.getTicketDetails('   '));
+      expect(error.name).to.equal('TicketNotFound');
+    } finally {
+      TicketProvider.resolveProvider = originalResolve;
+    }
+    expect(resolved).to.equal(false);
   }));
 });
 
@@ -835,6 +886,8 @@ describe('JiraProvider.searchTickets', () => {
     });
     const error = await rejectionOf(provider.searchTickets('project = ACME', { maxResults: 50 }));
     expect(error.name).to.equal('TicketProviderNotSupported');
+    // The host is only interpolated by the Server / Data Center message, not by the generic refusal
+    expect(error.message).to.contain('jira.acme.com');
     expect(called).to.equal(false);
   }));
 

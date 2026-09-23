@@ -185,6 +185,11 @@ export abstract class TicketProvider {
     options: TicketDetailsOptions & { providerKey?: TicketProviderKey } = {}
   ): Promise<TicketDetails | null> {
     const trimmedId = (ticketId || "").trim();
+    // Without this guard a blank id would reach the no-id (ticket list) branch of resolveProvider
+    // and call a provider with an empty key
+    if (!trimmedId) {
+      throw new SfError(t('ticketGetIdRequired'), TICKET_ERROR.notFound);
+    }
     const { provider, providerClass } = await this.resolveProvider({ ticketId: trimmedId, providerKey: options.providerKey });
     uxLog("action", this, c.cyan('[TicketProvider] ' + t('ticketDetailsFetching', { ticketId: trimmedId, provider: providerClass.providerLabel })));
     return provider.getTicketDetails(trimmedId, options);
