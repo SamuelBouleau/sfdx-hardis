@@ -9,6 +9,7 @@ import { AzureBoardsProvider } from '../../../src/common/ticketProvider/azureBoa
 import { GenericTicketingProvider } from '../../../src/common/ticketProvider/genericProvider.js';
 import { JiraProvider } from '../../../src/common/ticketProvider/jiraProvider.js';
 import { ServiceNowProvider } from '../../../src/common/ticketProvider/serviceNowProvider.js';
+import { TICKET_ERROR } from '../../../src/common/ticketProvider/ticketOperations.js';
 import { setFetchForTests } from '../../../src/common/utils/httpUtils.js';
 
 /** Sets env vars for the duration of one test, and restores whatever was there before */
@@ -1132,5 +1133,25 @@ describe('JiraProvider.addTicketComment', () => {
       },
     });
     expect((await rejectionOf(provider.addTicketComment('ACME-999', 'text'))).name).to.equal('TicketNotFound');
+  }));
+
+  it('rejects an answer without a comment id, unnamed, naming the ticket', withEnv(JIRA_ENV, async () => {
+    const provider = stubbedJira({ issueComments: { addComment: async () => ({}) } });
+    const error = await rejectionOf(provider.addTicketComment('acme-123', 'text'));
+    expect(Object.values(TICKET_ERROR)).to.not.include(error.name);
+    expect(error.message).to.contain('ACME-123');
+  }));
+
+  it('leaves a 400 on a too long comment unnamed, keeping the JIRA reason', withEnv(JIRA_ENV, async () => {
+    const provider = stubbedJira({
+      issueComments: {
+        addComment: async () => {
+          throw jiraHttpError(400, { errors: { comment: 'The entered text is too long. Please shorten it.' } });
+        },
+      },
+    });
+    const error = await rejectionOf(provider.addTicketComment('ACME-123', 'text'));
+    expect(Object.values(TICKET_ERROR)).to.not.include(error.name);
+    expect(error.message).to.contain('The entered text is too long. Please shorten it.');
   }));
 });

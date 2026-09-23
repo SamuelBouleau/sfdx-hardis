@@ -3661,6 +3661,7 @@
   "ticketAttachmentTooLarge": "Het bestand {{file}} is groter dan wat {{provider}} accepteert",
   "ticketCommentBodyEmpty": "De inhoud van de reactie is leeg: geef een niet-lege --body of --body-file op",
   "ticketCommentDone": "Reactie {{commentId}} geplaatst op {{ticketId}}",
+  "ticketCommentNotCreated": "{{ticketId}} antwoordde zonder commentaar-id: het commentaar is mogelijk niet geplaatst",
   "ticketCommentNotSupported": "{{provider}} kan geen reactie op een ticket plaatsen",
   "ticketDetailsAmbiguousProvider": "{{ticketId}} zou tot meerdere geconfigureerde ticketsystemen kunnen behoren ({{providers}}). Gebruik --provider om er een te kiezen.",
   "ticketDetailsFetching": "Ticket {{ticketId}} van {{provider}} ophalen",

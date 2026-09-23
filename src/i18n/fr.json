@@ -3661,6 +3661,7 @@
   "ticketAttachmentTooLarge": "Le fichier {{file}} est plus volumineux que ce que {{provider}} accepte",
   "ticketCommentBodyEmpty": "Le corps du commentaire est vide : indiquez un --body ou --body-file non vide",
   "ticketCommentDone": "Commentaire {{commentId}} publié sur {{ticketId}}",
+  "ticketCommentNotCreated": "{{ticketId}} a répondu sans identifiant de commentaire : le commentaire n'a peut-être pas été publié",
   "ticketCommentNotSupported": "{{provider}} ne peut pas publier de commentaire sur un ticket",
   "ticketDetailsAmbiguousProvider": "{{ticketId}} pourrait appartenir à plusieurs systèmes de tickets configurés ({{providers}}). Utilisez --provider pour en choisir un.",
   "ticketDetailsFetching": "Récupération du ticket {{provider}} {{ticketId}}",

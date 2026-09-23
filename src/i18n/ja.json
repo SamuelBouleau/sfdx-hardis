@@ -3658,6 +3658,7 @@
   "ticketAttachmentTooLarge": "ファイル {{file}} は {{provider}} が受け付けるサイズを超えています",
   "ticketCommentBodyEmpty": "コメント本文が空です。空でない --body または --body-file を指定してください",
   "ticketCommentDone": "{{ticketId}} にコメント {{commentId}} を投稿しました",
+  "ticketCommentNotCreated": "{{ticketId}} はコメント ID なしで応答しました。コメントが投稿されていない可能性があります",
   "ticketCommentNotSupported": "{{provider}} はチケットにコメントを投稿できません",
   "ticketDetailsAmbiguousProvider": "{{ticketId}} は複数の構成済みチケットシステム ({{providers}}) に属している可能性があります。--provider を使用していずれか1つを指定してください。",
   "ticketDetailsFetching": "{{provider}} チケット {{ticketId}} を取得しています",

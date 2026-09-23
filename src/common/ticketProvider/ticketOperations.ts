@@ -118,7 +118,8 @@ export function toTicketError(error: any, context: TicketErrorContext): Error {
       cause
     );
   }
-  if (status === 413) {
+  // Only an upload can be too large; elsewhere the server message says more than the attachment wording
+  if (status === 413 && context.operation === "attach") {
     return new SfError(
       t("ticketAttachmentTooLarge", { file: context.filename || "", provider: context.providerLabel }),
       TICKET_ERROR.attachmentTooLarge,

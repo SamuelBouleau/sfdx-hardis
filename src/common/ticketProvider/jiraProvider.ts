@@ -767,7 +767,12 @@ export class JiraProvider extends TicketProviderRoot {
     const posted: any = await this.runTicketOperation({ operation: "comment", ticketId: issueKey }, (client) =>
       client.issueComments.addComment({ issueIdOrKey: issueKey, comment })
     );
-    return { commentId: String(posted?.id ?? "") };
+    // The caller labels the ticket right after: a false success would skip it on every later run
+    const commentId = String(posted?.id ?? "").trim();
+    if (!commentId) {
+      throw new SfError(t("ticketCommentNotCreated", { ticketId: issueKey }));
+    }
+    return { commentId };
   }
 
   public async postDeploymentComments(tickets: Ticket[], org: string, pullRequestInfo: CommonPullRequestInfo | null): Promise<Ticket[]> {

@@ -3660,6 +3660,7 @@
   "ticketAttachmentTooLarge": "Die Datei {{file}} ist größer, als {{provider}} akzeptiert",
   "ticketCommentBodyEmpty": "Der Kommentartext ist leer: Geben Sie einen nicht leeren Wert für --body oder --body-file an",
   "ticketCommentDone": "Kommentar {{commentId}} auf {{ticketId}} veröffentlicht",
+  "ticketCommentNotCreated": "{{ticketId}} hat ohne Kommentar-ID geantwortet: Der Kommentar wurde möglicherweise nicht gepostet",
   "ticketCommentNotSupported": "{{provider}} kann keinen Kommentar zu einem Ticket veröffentlichen",
   "ticketDetailsAmbiguousProvider": "{{ticketId}} könnte zu mehreren konfigurierten Ticketsystemen gehören ({{providers}}). Verwenden Sie --provider, um eines auszuwählen.",
   "ticketDetailsFetching": "{{provider}}-Ticket {{ticketId}} wird abgerufen",

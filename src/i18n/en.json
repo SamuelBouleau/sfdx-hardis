@@ -3665,6 +3665,7 @@
   "ticketAttachmentTooLarge": "File {{file}} is larger than what {{provider}} accepts",
   "ticketCommentBodyEmpty": "The comment body is empty: pass a non-empty --body or --body-file",
   "ticketCommentDone": "Comment {{commentId}} posted on {{ticketId}}",
+  "ticketCommentNotCreated": "{{ticketId}} answered without a comment id: the comment may not have been posted",
   "ticketCommentNotSupported": "{{provider}} cannot post a comment on a ticket",
   "ticketDetailsAmbiguousProvider": "{{ticketId}} could belong to several configured ticketing systems ({{providers}}). Use --provider to pick one.",
   "ticketDetailsFetching": "Fetching {{provider}} ticket {{ticketId}}",

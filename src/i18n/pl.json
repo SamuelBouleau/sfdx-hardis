@@ -3661,6 +3661,7 @@
   "ticketAttachmentTooLarge": "Plik {{file}} jest większy niż akceptuje {{provider}}",
   "ticketCommentBodyEmpty": "Treść komentarza jest pusta: należy podać niepustą wartość --body lub --body-file",
   "ticketCommentDone": "Dodano komentarz {{commentId}} do {{ticketId}}",
+  "ticketCommentNotCreated": "{{ticketId}} odpowiedział bez identyfikatora komentarza: komentarz mógł nie zostać opublikowany",
   "ticketCommentNotSupported": "{{provider}} nie umożliwia dodawania komentarzy do zgłoszenia",
   "ticketDetailsAmbiguousProvider": "{{ticketId}} może należeć do kilku skonfigurowanych systemów zgłoszeń ({{providers}}). Użyj --provider, aby wybrać jeden z nich.",
   "ticketDetailsFetching": "Pobieranie zgłoszenia {{provider}} {{ticketId}}",

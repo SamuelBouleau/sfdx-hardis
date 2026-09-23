@@ -39,6 +39,16 @@ describe('ticketOperations', () => {
       expect(error.message).to.contain('draft.md');
     });
 
+    it('leaves a 413 on a comment unnamed, keeping the server message', () => {
+      const error = toTicketError(httpError(413, { errorMessages: ['Request entity too large'] }), {
+        providerLabel: 'JIRA',
+        operation: 'comment',
+        ticketId: 'ACME-1',
+      });
+      expect(Object.values(TICKET_ERROR)).to.not.include(error.name);
+      expect(error.message).to.contain('Request entity too large');
+    });
+
     it('names a 404 on a ticket TicketNotFound, and names the ticket', () => {
       const error = toTicketError(httpError(404), context);
       expect(error.name).to.equal(TICKET_ERROR.notFound);
