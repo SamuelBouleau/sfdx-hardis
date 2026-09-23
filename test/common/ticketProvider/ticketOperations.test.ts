@@ -10,6 +10,7 @@ import {
   serverMessageOf,
   toIsoDateTime,
   toTicketError,
+  validateTicketLabel,
 } from '../../../src/common/ticketProvider/ticketOperations.js';
 
 /** jira.js HttpException shape: status on the error, server payload under response.data */
@@ -147,6 +148,32 @@ describe('ticketOperations', () => {
     it('keeps an unreadable value as it is, and an empty one empty', () => {
       expect(toIsoDateTime('not a date')).to.equal('not a date');
       expect(toIsoDateTime('')).to.equal('');
+    });
+  });
+
+  describe('validateTicketLabel', () => {
+    it('returns null when no label is given', () => {
+      expect(validateTicketLabel(undefined)).to.equal(null);
+      expect(validateTicketLabel(null)).to.equal(null);
+      expect(validateTicketLabel('')).to.equal(null);
+    });
+
+    it('returns the trimmed label', () => {
+      expect(validateTicketLabel('  backlog-autopilot ')).to.equal('backlog-autopilot');
+    });
+
+    it('refuses a label with a space, and a blank label, without naming the error', () => {
+      for (const label of ['a b', '  ']) {
+        let caught: any;
+        try {
+          validateTicketLabel(label);
+        } catch (error) {
+          caught = error;
+        }
+        expect(caught, label).to.be.instanceOf(Error);
+        expect(caught.message, label).to.contain(`"${label}"`);
+        expect((Object.values(TICKET_ERROR) as string[]).includes(caught.name), label).to.equal(false);
+      }
     });
   });
 

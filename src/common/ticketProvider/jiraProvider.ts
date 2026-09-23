@@ -730,11 +730,16 @@ export class JiraProvider extends TicketProviderRoot {
       const uploaded: any[] = await this.runTicketOperation({ operation: "attach", ticketId: issueKey, filename: file.filename }, (client) =>
         client.issueAttachments.addAttachment({ issueIdOrKey: issueKey, attachment: { filename: file.filename, file: file.content } })
       );
-      for (const attachment of uploaded || []) {
+      // One file per call: an answer without any attachment means the file was not attached
+      if (!Array.isArray(uploaded) || uploaded.length === 0) {
+        throw new SfError(t("ticketAttachNothingUploaded", { ticketId: issueKey, file: file.filename }));
+      }
+      for (const attachment of uploaded) {
         results.push({
           filename: attachment.filename || file.filename,
           id: String(attachment.id),
-          url: attachment.content || attachment.self || "",
+          // content is the download link; self is the JSON metadata endpoint
+          url: attachment.content || "",
           size: attachment.size ?? file.size,
         });
       }

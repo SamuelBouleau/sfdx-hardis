@@ -165,6 +165,21 @@ export function toIsoDateTime(value: string): string {
   return isNaN(date.getTime()) ? value : date.toISOString();
 }
 
+/**
+ * Checked before any write: JIRA refuses a label containing whitespace, and the label is written after the
+ * attachment or the comment. Returns null when no label is asked for; the error is unnamed on purpose (P11).
+ */
+export function validateTicketLabel(label: string | null | undefined): string | null {
+  if (label === undefined || label === null || label === "") {
+    return null;
+  }
+  const trimmed = label.trim();
+  if (!trimmed || /\s/.test(trimmed)) {
+    throw new SfError(t("ticketLabelInvalid", { label }));
+  }
+  return trimmed;
+}
+
 /** Unnamed on purpose (P11), with the read failure kept as the cause */
 function fileNotReadable(file: string, error?: unknown): SfError {
   return new SfError(t("ticketFileNotReadable", { file }), undefined, undefined, error instanceof Error ? error : undefined);

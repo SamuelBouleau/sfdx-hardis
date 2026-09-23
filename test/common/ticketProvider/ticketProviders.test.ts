@@ -987,12 +987,22 @@ describe('JiraProvider attachments and labels', () => {
         addAttachment: async (parameters: any) => {
           calls.push(parameters);
           const id = String(10500 + calls.length);
-          return [{ id, filename: parameters.attachment.filename, size: 5, content: `https://acme.atlassian.net/rest/api/3/attachment/content/${id}` }];
+          return [
+            {
+              id,
+              filename: parameters.attachment.filename,
+              size: 5,
+              self: `https://acme.atlassian.net/rest/api/3/attachment/${id}`,
+              content: `https://acme.atlassian.net/rest/api/3/attachment/content/${id}`,
+            },
+          ];
         },
       },
     });
     const result = await provider.addTicketAttachments('acme-123', [file('a.md'), file('b.md')]);
     expect(calls.map((call) => call.issueIdOrKey)).to.deep.equal(['ACME-123', 'ACME-123']);
+    expect(calls.map((call) => call.attachment.filename)).to.deep.equal(['a.md', 'b.md']);
+    expect(calls.every((call) => Buffer.isBuffer(call.attachment.file) && call.attachment.file.toString() === 'draft')).to.equal(true);
     expect(result).to.deep.equal([
       { filename: 'a.md', id: '10501', url: 'https://acme.atlassian.net/rest/api/3/attachment/content/10501', size: 5 },
       { filename: 'b.md', id: '10502', url: 'https://acme.atlassian.net/rest/api/3/attachment/content/10502', size: 5 },
@@ -1011,6 +1021,53 @@ describe('JiraProvider attachments and labels', () => {
     expect(error.name).to.equal('TicketAttachmentTooLarge');
     expect(error.message).to.contain('huge.zip');
   }));
+
+  it('names the second file when only the second one is refused', withEnv(JIRA_ENV, async () => {
+    let callCount = 0;
+    const provider = stubbedJira({
+      issueAttachments: {
+        addAttachment: async (parameters: any) => {
+          callCount++;
+          if (callCount === 2) {
+            throw jiraHttpError(413);
+          }
+          return [{ id: '10501', filename: parameters.attachment.filename, size: 5, content: 'https://acme.atlassian.net/rest/api/3/attachment/content/10501' }];
+        },
+      },
+    });
+    const error = await rejectionOf(provider.addTicketAttachments('ACME-123', [file('small.md'), file('huge.zip')]));
+    expect(callCount).to.equal(2);
+    expect(error.name).to.equal('TicketAttachmentTooLarge');
+    expect(error.message).to.contain('huge.zip');
+    expect(error.message).to.not.contain('small.md');
+  }));
+
+  it('never reports the JSON metadata link as the download url', withEnv(JIRA_ENV, async () => {
+    const provider = stubbedJira({
+      issueAttachments: {
+        addAttachment: async () => [{ id: '10501', filename: 'a.md', size: 5, self: 'https://acme.atlassian.net/rest/api/3/attachment/10501' }],
+      },
+    });
+    const [attachment] = await provider.addTicketAttachments('ACME-123', [file('a.md')]);
+    expect(attachment.url).to.equal('');
+  }));
+
+  for (const [label, answer] of [
+    ['an empty array', []],
+    ['a non-array answer', { id: '10501' }],
+  ] as Array<[string, any]>) {
+    it(`does not report ${label} as an attached file`, withEnv(JIRA_ENV, async () => {
+      const provider = stubbedJira({
+        issueAttachments: {
+          addAttachment: async () => answer,
+        },
+      });
+      const error = await rejectionOf(provider.addTicketAttachments('ACME-123', [file('draft.md')]));
+      expect(error.message).to.contain('draft.md');
+      expect(error.message).to.contain('ACME-123');
+      expect(['TicketAttachmentTooLarge', 'TicketNotFound', 'TicketRateLimited']).to.not.include(error.name);
+    }));
+  }
 
   it('names an unknown ticket TicketNotFound', withEnv(JIRA_ENV, async () => {
     const provider = stubbedJira({
