@@ -5,7 +5,7 @@ import { AnyJson } from '@salesforce/ts-types';
 import c from 'chalk';
 import { uxLog } from '../../../common/utils/index.js';
 import { TicketProvider, TicketProviderKey, ticketDetailsProviderKeys } from '../../../common/ticketProvider/index.js';
-import { readUploadFiles, validateTicketLabel } from '../../../common/ticketProvider/ticketOperations.js';
+import { addTicketLabelAfterWrite, readUploadFiles, validateTicketLabel } from '../../../common/ticketProvider/ticketOperations.js';
 import { t } from '../../../common/utils/i18n.js';
 
 Messages.importMessagesDirectoryFromMetaUrl(import.meta.url);
@@ -21,11 +21,11 @@ export default class TicketAttach extends SfCommand<any> {
 
 - \`--file\` can be repeated: every file is uploaded, and the output has one entry per file (name, id, URL, size).
 - Every file is read **before** the first upload: a missing or unreadable file fails the command without attaching anything.
-- \`--add-label\` adds a label to the ticket in the same run, on top of the labels already there. A script uses it to mark the tickets already processed. If the label cannot be added after the upload, the command fails and says the files are already attached.
+- \`--add-label\` adds a label to the ticket in the same run, on top of the labels already there. A script uses it to mark the tickets already processed. If the label cannot be added after the upload, the command says the change was already saved, then fails with the original error. A caller should then add the label only, not re-run the command: re-running would upload the files again.
 
 ### Errors
 
-Failures carry a stable name, to branch on in a script: \`TicketProviderNotConfigured\`, \`TicketProviderNotSupported\`, \`TicketNotFound\` (unknown ticket, or not visible to you), \`TicketAttachmentTooLarge\` (the file is named), \`TicketRateLimited\` (HTTP 429).
+The provider failures below carry a stable name, to branch on in a script: \`TicketProviderNotConfigured\`, \`TicketProviderNotSupported\`, \`TicketNotFound\` (unknown ticket, or not visible to you), \`TicketAttachmentTooLarge\` (the file is named), \`TicketRateLimited\` (HTTP 429). Input errors caught before any network call (invalid label, unreadable file) and unexpected answers from the server carry no such name.
 
 ### Configuration
 
@@ -107,22 +107,15 @@ sf hardis ticket attach --id ACME-123 --file draft-ACME-123.md --add-label backl
       ticketId,
       providerKey: flags.provider as TicketProviderKey | undefined,
     });
+    const ticketKey = provider.normalizeTicketId(ticketId);
     const attachments = await provider.addTicketAttachments(ticketId, files);
-    uxLog('action', this, c.cyan(t('ticketAttachDone', { count: attachments.length, ticketId })));
-    if (label) {
-      try {
-        await provider.addTicketLabel(ticketId, label);
-      } catch (e) {
-        uxLog('warning', this, c.yellow(t('ticketLabelFailedAfterWrite', { ticketId, label })));
-        throw e;
-      }
-      uxLog('log', this, c.grey(t('ticketLabelDone', { label, ticketId })));
-    }
+    uxLog('action', this, c.cyan(t('ticketAttachDone', { count: attachments.length, ticketId: ticketKey })));
+    const labelAdded = await addTicketLabelAfterWrite(provider, ticketKey, label, this);
     return {
       provider: providerClass.providerKey,
-      ticket: ticketId,
+      ticket: ticketKey,
       attachments,
-      labelAdded: label,
+      labelAdded,
     } as unknown as AnyJson;
   }
 }

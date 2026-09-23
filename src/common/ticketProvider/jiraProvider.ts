@@ -538,7 +538,7 @@ export class JiraProvider extends TicketProviderRoot {
   }
 
   public async getTicketDetails(ticketId: string, options: TicketDetailsOptions = {}): Promise<TicketDetails | null> {
-    const issueKey = (ticketId || "").trim().toUpperCase();
+    const issueKey = this.normalizeTicketId(ticketId);
     const client = await this.getJiraClient();
     if (!client) {
       uxLog("warning", this, c.yellow('[JiraProvider] ' + t('jiraProviderNoUsableCredential')));
@@ -723,9 +723,14 @@ export class JiraProvider extends TicketProviderRoot {
     return { tickets, nextPageToken: pageToken, truncated: pageToken !== null };
   }
 
+  /** JIRA keys are upper case: acme-123 and ACME-123 are the same ticket */
+  public normalizeTicketId(ticketId: string): string {
+    return (ticketId || "").trim().toUpperCase();
+  }
+
   /** One call per file, so that the file the server refuses is the one named in the error */
   public async addTicketAttachments(ticketId: string, files: TicketUploadFile[]): Promise<TicketAttachmentResult[]> {
-    const issueKey = (ticketId || "").trim().toUpperCase();
+    const issueKey = this.normalizeTicketId(ticketId);
     const results: TicketAttachmentResult[] = [];
     for (const file of files) {
       const uploaded: any[] = await this.runTicketOperation({ operation: "attach", ticketId: issueKey, filename: file.filename }, (client) =>
@@ -750,7 +755,7 @@ export class JiraProvider extends TicketProviderRoot {
 
   /** Adds the label to the ones already on the ticket (update.add, never a replacement of the list) */
   public async addTicketLabel(ticketId: string, label: string): Promise<void> {
-    const issueKey = (ticketId || "").trim().toUpperCase();
+    const issueKey = this.normalizeTicketId(ticketId);
     await this.runTicketOperation({ operation: "label", ticketId: issueKey }, (client) =>
       client.issues.editIssue({ issueIdOrKey: issueKey, update: { labels: [{ add: label }] } })
     );
@@ -762,7 +767,7 @@ export class JiraProvider extends TicketProviderRoot {
    * guard: the caller makes the run idempotent with the label it adds.
    */
   public async addTicketComment(ticketId: string, body: string): Promise<{ commentId: string }> {
-    const issueKey = (ticketId || "").trim().toUpperCase();
+    const issueKey = this.normalizeTicketId(ticketId);
     const comment: any = this.isJiraCloud() ? buildJiraCommentAdf(body) : body;
     const posted: any = await this.runTicketOperation({ operation: "comment", ticketId: issueKey }, (client) =>
       client.issueComments.addComment({ issueIdOrKey: issueKey, comment })

@@ -1,8 +1,12 @@
 import { SfError } from "@salesforce/core";
+import c from "chalk";
 import type { Version3Models } from "jira.js";
 import * as path from "path";
 import fs from "../utils/fsUtils.js";
+import { uxLog } from "../utils/index.js";
 import { t } from "../utils/i18n.js";
+// Type-only: a value import here would close a runtime cycle ticketProviderRoot -> ticketOperations
+import type { TicketProviderRoot } from "./ticketProviderRoot.js";
 
 /**
  * Names carried by SfError.name for the ticket list / attach / comment commands.
@@ -216,7 +220,8 @@ export async function readCommentBody(body: string | undefined, bodyFile: string
   let text = body ?? "";
   if (bodyFile) {
     try {
-      text = await fs.readFile(bodyFile, "utf8");
+      // A file saved by a Windows editor may start with a BOM, which would land at the head of the comment
+      text = (await fs.readFile(bodyFile, "utf8")).replace(/^\uFEFF/, "");
     } catch (error) {
       throw fileNotReadable(bodyFile, error);
     }
@@ -225,4 +230,28 @@ export async function readCommentBody(body: string | undefined, bodyFile: string
     throw new SfError(t("ticketCommentBodyEmpty"));
   }
   return text;
+}
+
+/**
+ * Adds the label once the attachment or the comment is saved. Returns null when no label is asked for.
+ * A failure is logged, then the original error is rethrown (P4): the change is already saved, so the
+ * caller must add the label only, never run the command again.
+ */
+export async function addTicketLabelAfterWrite(
+  provider: TicketProviderRoot,
+  ticketId: string,
+  label: string | null,
+  commandThis: any
+): Promise<string | null> {
+  if (label === null) {
+    return null;
+  }
+  try {
+    await provider.addTicketLabel(ticketId, label);
+  } catch (error) {
+    uxLog("warning", commandThis, c.yellow(t("ticketLabelFailedAfterWrite", { ticketId, label })));
+    throw error;
+  }
+  uxLog("log", commandThis, c.grey(t("ticketLabelDone", { label, ticketId })));
+  return label;
 }

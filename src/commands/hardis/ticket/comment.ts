@@ -5,7 +5,7 @@ import { AnyJson } from '@salesforce/ts-types';
 import c from 'chalk';
 import { uxLog } from '../../../common/utils/index.js';
 import { TicketProvider, TicketProviderKey, ticketDetailsProviderKeys } from '../../../common/ticketProvider/index.js';
-import { readCommentBody, validateTicketLabel } from '../../../common/ticketProvider/ticketOperations.js';
+import { addTicketLabelAfterWrite, readCommentBody, validateTicketLabel } from '../../../common/ticketProvider/ticketOperations.js';
 import { t } from '../../../common/utils/i18n.js';
 
 Messages.importMessagesDirectoryFromMetaUrl(import.meta.url);
@@ -23,12 +23,12 @@ export default class TicketComment extends SfCommand<any> {
 
 - The text comes from \`--body\`, or from a file with \`--body-file\` for a long or multi-line text. Exactly one of them is required, and an empty text is refused.
 - On JIRA Cloud the text is sent as Atlassian Document Format (one paragraph per block separated by a blank line); on JIRA Server / Data Center it is sent as is. There it is rendered as wiki markup, so characters such as \`*\`, \`_\`, \`{\`, \`[\` or \`|\` may be formatted; on Cloud the text is always shown literally.
-- \`--add-label\` adds a label to the ticket in the same run, on top of the labels already there. The command does not check whether the same comment was already posted: a script makes its runs idempotent with that label. If the label cannot be added after the comment, the command fails and says the comment is already posted.
+- \`--add-label\` adds a label to the ticket in the same run, on top of the labels already there. The command does not check whether the same comment was already posted: a script makes its runs idempotent with that label. If the label cannot be added after the comment, the command says the change was already saved, then fails with the original error. A caller should then add the label only, not re-run the command: re-running would post the comment again.
 - This is not the deployment comment: no org and no Pull Request are involved.
 
 ### Errors
 
-Failures carry a stable name, to branch on in a script: \`TicketProviderNotConfigured\`, \`TicketProviderNotSupported\`, \`TicketNotFound\`, \`TicketRateLimited\` (HTTP 429).
+The provider failures below carry a stable name, to branch on in a script: \`TicketProviderNotConfigured\`, \`TicketProviderNotSupported\`, \`TicketNotFound\`, \`TicketRateLimited\` (HTTP 429). Input errors caught before any network call (invalid label, unreadable file, empty body) and unexpected answers from the server carry no such name.
 
 ### Configuration
 
@@ -111,22 +111,15 @@ sf hardis ticket comment --id ACME-123 --body-file status.md --add-label backlog
       ticketId,
       providerKey: flags.provider as TicketProviderKey | undefined,
     });
+    const ticketKey = provider.normalizeTicketId(ticketId);
     const { commentId } = await provider.addTicketComment(ticketId, body);
-    uxLog('action', this, c.cyan(t('ticketCommentDone', { commentId, ticketId })));
-    if (label) {
-      try {
-        await provider.addTicketLabel(ticketId, label);
-      } catch (e) {
-        uxLog('warning', this, c.yellow(t('ticketLabelFailedAfterWrite', { ticketId, label })));
-        throw e;
-      }
-      uxLog('log', this, c.grey(t('ticketLabelDone', { label, ticketId })));
-    }
+    uxLog('action', this, c.cyan(t('ticketCommentDone', { commentId, ticketId: ticketKey })));
+    const labelAdded = await addTicketLabelAfterWrite(provider, ticketKey, label, this);
     return {
       provider: providerClass.providerKey,
-      ticket: ticketId,
+      ticket: ticketKey,
       commentId,
-      labelAdded: label,
+      labelAdded,
     } as unknown as AnyJson;
   }
 }

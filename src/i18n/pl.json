@@ -3680,7 +3680,7 @@
   "ticketLabelInvalid": "Etykieta \"{{label}}\" jest nieprawidłowa: etykiety JIRA nie mogą być puste ani zawierać spacji",
   "ticketLabelNotSupported": "{{provider}} nie umożliwia dodawania etykiety do zgłoszenia",
   "ticketListAmbiguousProvider": "Skonfigurowano kilka systemów zgłoszeń ({{providers}}): należy podać --provider, aby wybrać system do odpytania",
-  "ticketListDone": "Znaleziono {{count}} zgłoszeń",
+  "ticketListDone": "Znaleziono zgłoszenia: {{count}}",
   "ticketListMore": "Więcej zgłoszeń pasuje do tego zapytania: należy przekazać nextPageToken z danych wyjściowych JSON do --page-token, aby odczytać kolejną stronę",
   "ticketListNotSupported": "{{provider}} nie umożliwia listowania zgłoszeń na podstawie zapytania",
   "ticketListProviderNotConfigured": "Aby wyświetlić listę zgłoszeń, wymagane jest skonfigurowanie jednego z tych systemów zgłoszeń: {{providers}}",

@@ -4,6 +4,7 @@ import * as path from 'path';
 import fs from '../../../src/common/utils/fsUtils.js';
 import {
   TICKET_ERROR,
+  addTicketLabelAfterWrite,
   buildJiraCommentAdf,
   readCommentBody,
   readUploadFiles,
@@ -240,6 +241,12 @@ describe('ticketOperations', () => {
       expect(await readCommentBody(undefined, bodyFile)).to.equal('From file');
     });
 
+    it('strips a leading UTF-8 BOM from --body-file', async () => {
+      const bodyFile = path.join(tmpDir, 'bom.md');
+      await fs.writeFile(bodyFile, '\uFEFFFrom file', 'utf8');
+      expect(await readCommentBody(undefined, bodyFile)).to.equal('From file');
+    });
+
     it('refuses an empty body', async () => {
       let error: any;
       try {
@@ -248,6 +255,45 @@ describe('ticketOperations', () => {
         error = e;
       }
       expect(error, 'expected a rejection').to.exist;
+    });
+  });
+
+  describe('addTicketLabelAfterWrite', () => {
+    function stubProvider(behavior: () => Promise<void>) {
+      const calls: Array<[string, string]> = [];
+      const provider: any = {
+        addTicketLabel: async (ticketId: string, label: string) => {
+          calls.push([ticketId, label]);
+          await behavior();
+        },
+      };
+      return { provider, calls };
+    }
+
+    it('does nothing and returns null when no label is asked for', async () => {
+      const { provider, calls } = stubProvider(async () => undefined);
+      expect(await addTicketLabelAfterWrite(provider, 'ACME-1', null, null)).to.equal(null);
+      expect(calls).to.deep.equal([]);
+    });
+
+    it('adds the label and returns it', async () => {
+      const { provider, calls } = stubProvider(async () => undefined);
+      expect(await addTicketLabelAfterWrite(provider, 'ACME-1', 'backlog-autopilot', null)).to.equal('backlog-autopilot');
+      expect(calls).to.deep.equal([['ACME-1', 'backlog-autopilot']]);
+    });
+
+    it('rethrows the very error of the failed label call', async () => {
+      const original = new Error('label refused');
+      const { provider } = stubProvider(async () => {
+        throw original;
+      });
+      let caught: any;
+      try {
+        await addTicketLabelAfterWrite(provider, 'ACME-1', 'backlog-autopilot', null);
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught).to.equal(original);
     });
   });
 });

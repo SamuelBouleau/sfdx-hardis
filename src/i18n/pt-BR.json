@@ -3626,7 +3626,7 @@
   "ticketAttachNothingUploaded": "{{ticketId}} respondeu sem nenhum anexo para {{file}}: o arquivo não foi anexado",
   "ticketAttachNotSupported": "{{provider}} não pode anexar arquivos a um ticket",
   "ticketCommentBodyEmpty": "O corpo do comentário está vazio: informe um --body ou --body-file não vazio",
-  "ticketCommentDone": "Comentário {{commentId}} publicado em {{ticketId}}",
+  "ticketCommentDone": "Comentário {{commentId}} postado em {{ticketId}}",
   "ticketCommentNotCreated": "{{ticketId}} respondeu sem nenhum id de comentário: o comentário pode não ter sido publicado",
   "ticketCommentNotSupported": "{{provider}} não pode publicar um comentário em um ticket",
   "ticketDetailsAmbiguousProvider": "{{ticketId}} pode pertencer a vários sistemas de tickets configurados ({{providers}}). Use --provider para escolher um.",

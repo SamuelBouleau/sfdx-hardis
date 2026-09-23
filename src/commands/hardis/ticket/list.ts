@@ -6,6 +6,7 @@ import c from 'chalk';
 import * as path from 'path';
 import fs from '../../../common/utils/fsUtils.js';
 import { uxLog } from '../../../common/utils/index.js';
+import { uxLogTableWithReport } from '../../../common/utils/filesUtils.js';
 import { TicketProvider, TicketProviderKey, ticketDetailsProviderKeys } from '../../../common/ticketProvider/index.js';
 import { TICKET_ERROR, TicketSearchResult } from '../../../common/ticketProvider/ticketOperations.js';
 import { t } from '../../../common/utils/i18n.js';
@@ -144,11 +145,14 @@ sf hardis ticket list --query "project = ACME AND statusCategory != Done" --agen
     const result = buildTicketListResult(providerKey, query, search);
 
     uxLog('action', this, c.cyan(t('ticketListDone', { count: result.totalFetched })));
-    for (const ticket of result.tickets) {
-      uxLog('log', this, c.grey(`${ticket.id} [${ticket.type} / ${ticket.status}] ${ticket.subject}`));
+    if (result.tickets.length > 0) {
+      await uxLogTableWithReport(this, result.tickets, ['id', 'type', 'status', 'priority', 'assignee', 'subject'], {
+        fileNamePrefix: 'ticket-list',
+      });
     }
     if (result.truncated) {
       uxLog('warning', this, c.yellow(t('ticketListMore')));
+      uxLog('log', this, c.grey(String(result.nextPageToken)));
     }
     if (flags['output-file']) {
       await fs.ensureDir(path.dirname(path.resolve(flags['output-file'])));

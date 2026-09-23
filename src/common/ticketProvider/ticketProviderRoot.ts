@@ -103,6 +103,11 @@ export abstract class TicketProviderRoot {
    * one of them fails with TicketProviderNotSupported: an empty result would turn an incapacity into
    * "nothing to do", which a caller processing a backlog cannot tell apart.
    */
+  /** The key as the ticketing system writes it, used in the results and the logs of the ticket commands */
+  public normalizeTicketId(ticketId: string): string {
+    return (ticketId || "").trim();
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   public async searchTickets(_query: string, _options: TicketSearchOptions): Promise<TicketSearchResult> {
     throw ticketProviderNotSupported(this.getLabel(), "list");
