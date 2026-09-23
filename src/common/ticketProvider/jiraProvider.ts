@@ -25,10 +25,12 @@ import {
 } from "./ticketDetails.js";
 import {
   TICKET_ERROR,
+  TicketAttachmentResult,
   TicketErrorContext,
   TicketSearchOptions,
   TicketSearchResult,
   TicketSummary,
+  TicketUploadFile,
   toIsoDateTime,
   toTicketError,
 } from "./ticketOperations.js";
@@ -708,6 +710,34 @@ export class JiraProvider extends TicketProviderRoot {
       }
     }
     return { tickets, nextPageToken: pageToken, truncated: pageToken !== null };
+  }
+
+  /** One call per file, so that the file the server refuses is the one named in the error */
+  public async addTicketAttachments(ticketId: string, files: TicketUploadFile[]): Promise<TicketAttachmentResult[]> {
+    const issueKey = (ticketId || "").trim().toUpperCase();
+    const results: TicketAttachmentResult[] = [];
+    for (const file of files) {
+      const uploaded: any[] = await this.runTicketOperation({ operation: "attach", ticketId: issueKey, filename: file.filename }, (client) =>
+        client.issueAttachments.addAttachment({ issueIdOrKey: issueKey, attachment: { filename: file.filename, file: file.content } })
+      );
+      for (const attachment of uploaded || []) {
+        results.push({
+          filename: attachment.filename || file.filename,
+          id: String(attachment.id),
+          url: attachment.content || attachment.self || "",
+          size: attachment.size ?? file.size,
+        });
+      }
+    }
+    return results;
+  }
+
+  /** Adds the label to the ones already on the ticket (update.add, never a replacement of the list) */
+  public async addTicketLabel(ticketId: string, label: string): Promise<void> {
+    const issueKey = (ticketId || "").trim().toUpperCase();
+    await this.runTicketOperation({ operation: "label", ticketId: issueKey }, (client) =>
+      client.issues.editIssue({ issueIdOrKey: issueKey, update: { labels: [{ add: label }] } })
+    );
   }
 
   public async postDeploymentComments(tickets: Ticket[], org: string, pullRequestInfo: CommonPullRequestInfo | null): Promise<Ticket[]> {

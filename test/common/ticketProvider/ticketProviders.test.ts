@@ -920,3 +920,63 @@ describe('JiraProvider.searchTickets', () => {
     expect((await rejectionOf(provider.searchTickets('project = ACME', { maxResults: 50 }))).name).to.equal('TicketProviderNotConfigured');
   }));
 });
+
+describe('JiraProvider attachments and labels', () => {
+  const file = (filename: string) => ({ filename, content: Buffer.from('draft'), size: 5 });
+
+  it('uploads one file per call and maps the contract fields', withEnv(JIRA_ENV, async () => {
+    const calls: any[] = [];
+    const provider = stubbedJira({
+      issueAttachments: {
+        addAttachment: async (parameters: any) => {
+          calls.push(parameters);
+          const id = String(10500 + calls.length);
+          return [{ id, filename: parameters.attachment.filename, size: 5, content: `https://acme.atlassian.net/rest/api/3/attachment/content/${id}` }];
+        },
+      },
+    });
+    const result = await provider.addTicketAttachments('acme-123', [file('a.md'), file('b.md')]);
+    expect(calls.map((call) => call.issueIdOrKey)).to.deep.equal(['ACME-123', 'ACME-123']);
+    expect(result).to.deep.equal([
+      { filename: 'a.md', id: '10501', url: 'https://acme.atlassian.net/rest/api/3/attachment/content/10501', size: 5 },
+      { filename: 'b.md', id: '10502', url: 'https://acme.atlassian.net/rest/api/3/attachment/content/10502', size: 5 },
+    ]);
+  }));
+
+  it('names a refused file TicketAttachmentTooLarge', withEnv(JIRA_ENV, async () => {
+    const provider = stubbedJira({
+      issueAttachments: {
+        addAttachment: async () => {
+          throw jiraHttpError(413);
+        },
+      },
+    });
+    const error = await rejectionOf(provider.addTicketAttachments('ACME-123', [file('huge.zip')]));
+    expect(error.name).to.equal('TicketAttachmentTooLarge');
+    expect(error.message).to.contain('huge.zip');
+  }));
+
+  it('names an unknown ticket TicketNotFound', withEnv(JIRA_ENV, async () => {
+    const provider = stubbedJira({
+      issueAttachments: {
+        addAttachment: async () => {
+          throw jiraHttpError(404, { errorMessages: ['Issue does not exist or you do not have permission to see it.'] });
+        },
+      },
+    });
+    expect((await rejectionOf(provider.addTicketAttachments('ACME-999', [file('a.md')]))).name).to.equal('TicketNotFound');
+  }));
+
+  it('adds a label without replacing the existing ones', withEnv(JIRA_ENV, async () => {
+    let received: any;
+    const provider = stubbedJira({
+      issues: {
+        editIssue: async (parameters: any) => {
+          received = parameters;
+        },
+      },
+    });
+    await provider.addTicketLabel('ACME-123', 'backlog-autopilot');
+    expect(received).to.deep.equal({ issueIdOrKey: 'ACME-123', update: { labels: [{ add: 'backlog-autopilot' }] } });
+  }));
+});
