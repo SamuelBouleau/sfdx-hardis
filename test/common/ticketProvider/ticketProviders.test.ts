@@ -654,3 +654,27 @@ describe('GenericTicketingProvider.collectTicketsInfo', () => {
     expect(getTicketCollectionIssues()[0]).to.contain('2 of 2');
   });
 });
+
+/** Returns the rejection of a promise, or fails the test when it resolves */
+async function rejectionOf(promise: Promise<unknown>): Promise<any> {
+  try {
+    await promise;
+  } catch (e) {
+    return e;
+  }
+  throw new Error('Expected a rejection');
+}
+
+describe('ticket operations on providers that cannot do them', () => {
+  const providers = () => [new AzureBoardsProvider({}), new ServiceNowProvider({}), new GenericTicketingProvider({})];
+
+  it('fail with TicketProviderNotSupported, never with an empty result', async () => {
+    for (const provider of providers()) {
+      const label = provider.getLabel();
+      expect((await rejectionOf(provider.searchTickets('project = ACME', { maxResults: 50 }))).name, label).to.equal('TicketProviderNotSupported');
+      expect((await rejectionOf(provider.addTicketAttachments('ACME-1', []))).name, label).to.equal('TicketProviderNotSupported');
+      expect((await rejectionOf(provider.addTicketComment('ACME-1', 'text'))).name, label).to.equal('TicketProviderNotSupported');
+      expect((await rejectionOf(provider.addTicketLabel('ACME-1', 'tag'))).name, label).to.equal('TicketProviderNotSupported');
+    }
+  });
+});

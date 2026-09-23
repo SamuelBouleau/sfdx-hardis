@@ -12,6 +12,13 @@ import {
   TicketDetailsOptions,
   downloadTicketAttachment,
 } from "./ticketDetails.js";
+import {
+  TicketAttachmentResult,
+  TicketSearchOptions,
+  TicketSearchResult,
+  TicketUploadFile,
+  ticketProviderNotSupported,
+} from "./ticketOperations.js";
 import { t } from '../utils/i18n.js';
 
 // Issues met while collecting ticket details (ex: expired JIRA token), so the Pull Request
@@ -89,6 +96,31 @@ export abstract class TicketProviderRoot {
   public async postDeploymentComments(tickets: Ticket[], _org: string, _pullRequestInfo: CommonPullRequestInfo | null): Promise<Ticket[]> {
     uxLog("warning", this, c.yellow(t('postdeploymentcommentsIsNotImplementedOn') + this.getLabel()));
     return tickets;
+  }
+
+  /**
+   * The four operations of the ticket list / attach / comment commands. A provider that cannot do
+   * one of them fails with TicketProviderNotSupported: an empty result would turn an incapacity into
+   * "nothing to do", which a caller processing a backlog cannot tell apart.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  public async searchTickets(_query: string, _options: TicketSearchOptions): Promise<TicketSearchResult> {
+    throw ticketProviderNotSupported(this.getLabel(), "list");
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  public async addTicketAttachments(_ticketId: string, _files: TicketUploadFile[]): Promise<TicketAttachmentResult[]> {
+    throw ticketProviderNotSupported(this.getLabel(), "attach");
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  public async addTicketComment(_ticketId: string, _body: string): Promise<{ commentId: string }> {
+    throw ticketProviderNotSupported(this.getLabel(), "comment");
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  public async addTicketLabel(_ticketId: string, _label: string): Promise<void> {
+    throw ticketProviderNotSupported(this.getLabel(), "label");
   }
 
   public async getDeploymentTag(): Promise<string> {
