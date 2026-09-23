@@ -23,6 +23,15 @@ import {
   newTicketDetails,
   normalizeText,
 } from "./ticketDetails.js";
+import {
+  TICKET_ERROR,
+  TicketErrorContext,
+  TicketSearchOptions,
+  TicketSearchResult,
+  TicketSummary,
+  toIsoDateTime,
+  toTicketError,
+} from "./ticketOperations.js";
 
 // One way of authenticating to JIRA. The client is built lazily, so that a refused credential can
 // be replaced by the next one without paying for the ones that are never used.
@@ -48,6 +57,9 @@ export class JiraProvider extends TicketProviderRoot {
   private jiraHost: string | null = null;
   // A refused credential answers with a login page instead of JSON on some Server/DC instances
   private static readonly LOGIN_PAGE_ERROR = "JIRA answered with an HTML login page instead of JSON";
+  // Jira Cloud caps a search page at 100 issues when fields are requested
+  private static readonly SEARCH_PAGE_SIZE = 100;
+  private static readonly SEARCH_FIELDS = ["summary", "issuetype", "status", "priority", "assignee", "created", "updated", "labels"];
 
   /** A JIRA Server behind an SSO proxy answers 200 with its HTML login page: detect that shape */
   private static containsHtmlLoginPage(value: any): boolean {
@@ -627,6 +639,75 @@ export class JiraProvider extends TicketProviderRoot {
       ...details.attachments.map((attachment) => attachment.textContent),
     ]);
     return details;
+  }
+
+  /**
+   * Runs one call of the ticket list / attach / comment commands: fails with a named error when no
+   * credential is usable, and converts the HTTP failures into the named errors of the contract.
+   */
+  private async runTicketOperation<T>(
+    context: Omit<TicketErrorContext, "providerLabel">,
+    call: (client: Version2Client) => Promise<T>
+  ): Promise<T> {
+    if (!(await this.getJiraClient())) {
+      throw new SfError(t('ticketProviderNoCredential', { provider: JiraProvider.providerLabel }), TICKET_ERROR.providerNotConfigured);
+    }
+    try {
+      return await this.runJiraCall(call);
+    } catch (e) {
+      throw toTicketError(e, { providerLabel: JiraProvider.providerLabel, ...context });
+    }
+  }
+
+  private toTicketSummary(issue: any): TicketSummary {
+    const fields = issue?.fields || {};
+    return {
+      id: issue.key,
+      url: `${this.jiraHost}/browse/${issue.key}`,
+      subject: fields.summary || "",
+      type: fields.issuetype?.name || "",
+      status: fields.status?.name || "",
+      priority: fields.priority?.name || "",
+      assignee: fields.assignee?.displayName || null,
+      created: toIsoDateTime(fields.created || ""),
+      updated: toIsoDateTime(fields.updated || ""),
+      labels: fields.labels || [],
+    };
+  }
+
+  /**
+   * JQL search on /search/jql, the endpoint that replaced the removed /rest/api/3/search. The page
+   * cursor is relayed as is: it is opaque by contract, and the JQL is the caller's, never rebuilt.
+   * Never fetches more than options.maxResults issues.
+   */
+  public async searchTickets(query: string, options: TicketSearchOptions): Promise<TicketSearchResult> {
+    if (!(await this.getJiraClient())) {
+      throw new SfError(t('ticketProviderNoCredential', { provider: JiraProvider.providerLabel }), TICKET_ERROR.providerNotConfigured);
+    }
+    // /search/jql only exists on Jira Cloud; Server / Data Center only has the offset-based /search (D7)
+    if (!this.isJiraCloud()) {
+      throw new SfError(t('ticketListServerDcNotSupported', { host: this.jiraHost }), TICKET_ERROR.providerNotSupported);
+    }
+    const tickets: TicketSummary[] = [];
+    let pageToken: string | null = options.pageToken || null;
+    for (;;) {
+      const remaining = options.maxResults - tickets.length;
+      const page: any = await this.runTicketOperation({ operation: "list" }, (client) =>
+        client.issueSearch.searchForIssuesUsingJqlEnhancedSearchPost({
+          jql: query,
+          nextPageToken: pageToken || undefined,
+          maxResults: Math.min(remaining, JiraProvider.SEARCH_PAGE_SIZE),
+          fields: JiraProvider.SEARCH_FIELDS,
+        })
+      );
+      const issues: any[] = page?.issues || [];
+      tickets.push(...issues.map((issue) => this.toTicketSummary(issue)));
+      pageToken = page?.nextPageToken || null;
+      if (!pageToken || issues.length === 0 || tickets.length >= options.maxResults) {
+        break;
+      }
+    }
+    return { tickets, nextPageToken: pageToken, truncated: pageToken !== null };
   }
 
   public async postDeploymentComments(tickets: Ticket[], org: string, pullRequestInfo: CommonPullRequestInfo | null): Promise<Ticket[]> {

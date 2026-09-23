@@ -733,3 +733,137 @@ describe('TicketProvider.resolveProvider', () => {
     expect(error.message).to.contain('--provider');
   }));
 });
+
+/** A JiraProvider whose jira.js client is replaced: getJiraClient() returns it as the active client */
+function stubbedJira(client: any): JiraProvider {
+  const provider = new JiraProvider({});
+  (provider as any).jiraClient = client;
+  return provider;
+}
+
+function jiraHttpError(status: number, data: any = {}): any {
+  const error: any = new Error(`Request failed with status code ${status}`);
+  error.status = status;
+  error.response = { status, data };
+  return error;
+}
+
+const jiraIssue = (key: string) => ({
+  key,
+  fields: {
+    summary: `Summary of ${key}`,
+    issuetype: { name: 'Bug' },
+    status: { name: 'Open' },
+    priority: { name: 'High' },
+    assignee: null,
+    created: '2026-09-01T12:12:00.000+0200',
+    updated: '2026-09-18T08:03:00.000+0000',
+    labels: ['backlog'],
+  },
+});
+
+describe('JiraProvider.searchTickets', () => {
+  it('maps every field of the contract', withEnv(JIRA_ENV, async () => {
+    const provider = stubbedJira({
+      issueSearch: { searchForIssuesUsingJqlEnhancedSearchPost: async () => ({ issues: [jiraIssue('ACME-1')] }) },
+    });
+    const result = await provider.searchTickets('project = ACME', { maxResults: 50 });
+    expect(result.tickets).to.deep.equal([
+      {
+        id: 'ACME-1',
+        url: 'https://acme.atlassian.net/browse/ACME-1',
+        subject: 'Summary of ACME-1',
+        type: 'Bug',
+        status: 'Open',
+        priority: 'High',
+        assignee: null,
+        created: '2026-09-01T10:12:00.000Z',
+        updated: '2026-09-18T08:03:00.000Z',
+        labels: ['backlog'],
+      },
+    ]);
+    expect(result.nextPageToken).to.equal(null);
+    expect(result.truncated).to.equal(false);
+  }));
+
+  it('follows the cursor until --max-results, then reports the rest as truncated', withEnv(JIRA_ENV, async () => {
+    const calls: any[] = [];
+    const pages = [
+      { issues: [jiraIssue('ACME-1'), jiraIssue('ACME-2')], nextPageToken: 'cursor-1' },
+      { issues: [jiraIssue('ACME-3')], nextPageToken: 'cursor-2' },
+    ];
+    const provider = stubbedJira({
+      issueSearch: {
+        searchForIssuesUsingJqlEnhancedSearchPost: async (parameters: any) => {
+          calls.push(parameters);
+          return pages[calls.length - 1];
+        },
+      },
+    });
+    const result = await provider.searchTickets('project = ACME', { maxResults: 3 });
+    expect(result.tickets.map((ticket) => ticket.id)).to.deep.equal(['ACME-1', 'ACME-2', 'ACME-3']);
+    expect(calls.map((call) => call.maxResults)).to.deep.equal([3, 1]);
+    expect(calls[1].nextPageToken).to.equal('cursor-1');
+    expect(result.nextPageToken).to.equal('cursor-2');
+    expect(result.truncated).to.equal(true);
+  }));
+
+  it('relays --page-token as is on the first call', withEnv(JIRA_ENV, async () => {
+    let received: any;
+    const provider = stubbedJira({
+      issueSearch: {
+        searchForIssuesUsingJqlEnhancedSearchPost: async (parameters: any) => {
+          received = parameters;
+          return { issues: [] };
+        },
+      },
+    });
+    await provider.searchTickets('project = ACME', { maxResults: 50, pageToken: 'opaque-token' });
+    expect(received.nextPageToken).to.equal('opaque-token');
+    expect(received.jql).to.equal('project = ACME');
+  }));
+
+  it('refuses Jira Server / Data Center without calling it', withEnv({ ...JIRA_ENV, JIRA_HOST: 'https://jira.acme.com' }, async () => {
+    let called = false;
+    const provider = stubbedJira({
+      issueSearch: {
+        searchForIssuesUsingJqlEnhancedSearchPost: async () => {
+          called = true;
+          return { issues: [] };
+        },
+      },
+    });
+    const error = await rejectionOf(provider.searchTickets('project = ACME', { maxResults: 50 }));
+    expect(error.name).to.equal('TicketProviderNotSupported');
+    expect(called).to.equal(false);
+  }));
+
+  it('names a rejected query TicketQueryInvalid, keeping the JIRA message', withEnv(JIRA_ENV, async () => {
+    const provider = stubbedJira({
+      issueSearch: {
+        searchForIssuesUsingJqlEnhancedSearchPost: async () => {
+          throw jiraHttpError(400, { errorMessages: ["Field 'nope' does not exist"] });
+        },
+      },
+    });
+    const error = await rejectionOf(provider.searchTickets('nope = 1', { maxResults: 50 }));
+    expect(error.name).to.equal('TicketQueryInvalid');
+    expect(error.message).to.contain("Field 'nope' does not exist");
+  }));
+
+  it('names a 429 TicketRateLimited', withEnv(JIRA_ENV, async () => {
+    const provider = stubbedJira({
+      issueSearch: {
+        searchForIssuesUsingJqlEnhancedSearchPost: async () => {
+          throw jiraHttpError(429);
+        },
+      },
+    });
+    expect((await rejectionOf(provider.searchTickets('project = ACME', { maxResults: 50 }))).name).to.equal('TicketRateLimited');
+  }));
+
+  it('names a missing credential TicketProviderNotConfigured', withEnv(NO_JIRA_ENV, async () => {
+    const provider = new JiraProvider({});
+    expect((await rejectionOf(provider.searchTickets('project = ACME', { maxResults: 50 }))).name).to.equal('TicketProviderNotConfigured');
+  }));
+});
