@@ -99,30 +99,45 @@ function isNamedTicketError(error: any): boolean {
   return (Object.values(TICKET_ERROR) as string[]).includes(error?.name);
 }
 
-/** Turns an HTTP failure into the named error of the contract; anything else is returned untouched */
+/** Turns an HTTP failure into the named error of the contract; anything else stays unnamed, with the server reason */
 export function toTicketError(error: any, context: TicketErrorContext): Error {
   if (isNamedTicketError(error)) {
     return error;
   }
   const status = httpStatusOf(error);
   const message = serverMessageOf(error);
+  const cause = error instanceof Error ? error : undefined;
   if (status === 429) {
-    return new SfError(t("ticketRateLimited", { provider: context.providerLabel }), TICKET_ERROR.rateLimited);
+    return new SfError(t("ticketRateLimited", { provider: context.providerLabel }), TICKET_ERROR.rateLimited, undefined, cause);
   }
   if (status === 401) {
-    return new SfError(t("ticketProviderCredentialsRefused", { provider: context.providerLabel, message }), TICKET_ERROR.providerNotConfigured);
+    return new SfError(
+      t("ticketProviderCredentialsRefused", { provider: context.providerLabel, message }),
+      TICKET_ERROR.providerNotConfigured,
+      undefined,
+      cause
+    );
   }
   if (status === 413) {
-    return new SfError(t("ticketAttachmentTooLarge", { file: context.filename || "", provider: context.providerLabel }), TICKET_ERROR.attachmentTooLarge);
+    return new SfError(
+      t("ticketAttachmentTooLarge", { file: context.filename || "", provider: context.providerLabel }),
+      TICKET_ERROR.attachmentTooLarge,
+      undefined,
+      cause
+    );
   }
   if (status === 400 && context.operation === "list") {
-    return new SfError(t("ticketQueryInvalid", { message }), TICKET_ERROR.queryInvalid);
+    return new SfError(t("ticketQueryInvalid", { message }), TICKET_ERROR.queryInvalid, undefined, cause);
   }
   // A 403 is a missing permission on a ticket that exists: it stays an ordinary error
   if (status === 404 && context.ticketId) {
-    return new SfError(t("ticketNotFound", { ticketId: context.ticketId }), TICKET_ERROR.notFound);
+    return new SfError(t("ticketNotFound", { ticketId: context.ticketId }), TICKET_ERROR.notFound, undefined, cause);
   }
-  return error instanceof Error ? error : new Error(message);
+  if (!cause) {
+    return new Error(message);
+  }
+  // Unnamed on purpose, but with the server reason rather than "Request failed with status code 403"
+  return message !== cause.message ? new SfError(message, undefined, undefined, cause) : cause;
 }
 
 /**
@@ -150,22 +165,33 @@ export function toIsoDateTime(value: string): string {
   return isNaN(date.getTime()) ? value : date.toISOString();
 }
 
+/** Unnamed on purpose (P11), with the read failure kept as the cause */
+function fileNotReadable(file: string, error?: unknown): SfError {
+  return new SfError(t("ticketFileNotReadable", { file }), undefined, undefined, error instanceof Error ? error : undefined);
+}
+
 /**
  * Reads every file before the first upload, so that a wrong path never leaves a ticket half attached.
  */
 export async function readUploadFiles(filePaths: string[]): Promise<TicketUploadFile[]> {
   const files: TicketUploadFile[] = [];
   for (const filePath of filePaths) {
-    try {
-      const stats = await fs.stat(filePath);
-      if (!stats.isFile()) {
-        throw new Error("not a file");
+    const isFile = await fs.stat(filePath).then(
+      (stats) => stats.isFile(),
+      (error) => {
+        throw fileNotReadable(filePath, error);
       }
-      const content = await fs.readFile(filePath);
-      files.push({ filename: path.basename(filePath), content, size: stats.size });
-    } catch {
-      throw new SfError(t("ticketFileNotReadable", { file: filePath }));
+    );
+    if (!isFile) {
+      throw fileNotReadable(filePath);
     }
+    let content: Buffer;
+    try {
+      content = await fs.readFile(filePath);
+    } catch (error) {
+      throw fileNotReadable(filePath, error);
+    }
+    files.push({ filename: path.basename(filePath), content, size: content.length });
   }
   return files;
 }
@@ -175,8 +201,8 @@ export async function readCommentBody(body: string | undefined, bodyFile: string
   if (bodyFile) {
     try {
       text = await fs.readFile(bodyFile, "utf8");
-    } catch {
-      throw new SfError(t("ticketFileNotReadable", { file: bodyFile }));
+    } catch (error) {
+      throw fileNotReadable(bodyFile, error);
     }
   }
   if (!text.trim()) {

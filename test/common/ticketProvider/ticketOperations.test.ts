@@ -2,8 +2,6 @@ import { expect } from 'chai';
 import * as os from 'os';
 import * as path from 'path';
 import fs from '../../../src/common/utils/fsUtils.js';
-// Load the barrel first, as ticketProviders.test.ts does, to resolve the pre-existing import cycle
-import '../../../src/common/ticketProvider/index.js';
 import {
   TICKET_ERROR,
   buildJiraCommentAdf,
@@ -56,7 +54,46 @@ describe('ticketOperations', () => {
     });
 
     it('does not turn a 403 into TicketNotFound: a missing permission is not a missing ticket', () => {
-      expect(toTicketError(httpError(403), context).name).to.not.equal(TICKET_ERROR.notFound);
+      const error = toTicketError(httpError(403, { errorMessages: ['You do not have permission to edit this issue.'] }), context);
+      expect(Object.values(TICKET_ERROR)).to.not.include(error.name);
+      expect(error.message).to.contain('You do not have permission to edit this issue.');
+    });
+
+    it('keeps the original error as the cause of a named error', () => {
+      const original = httpError(429);
+      expect((toTicketError(original, context) as any).cause).to.equal(original);
+    });
+
+    it('keeps the original error as the cause of an unnamed error carrying the server reason', () => {
+      const original = httpError(403, { errorMessages: ['No permission'] });
+      expect((toTicketError(original, context) as any).cause).to.equal(original);
+    });
+
+    it('turns a thrown string into an Error carrying that string', () => {
+      const error = toTicketError('socket closed', context);
+      expect(error).to.be.instanceOf(Error);
+      expect(error.message).to.equal('socket closed');
+    });
+
+    it('reads a status carried only on response.status', () => {
+      const error: any = new Error('Too many requests');
+      error.response = { status: 429, data: {} };
+      expect(toTicketError(error, context).name).to.equal(TICKET_ERROR.rateLimited);
+    });
+
+    it('leaves a 404 without a ticket id unnamed', () => {
+      const error = toTicketError(httpError(404), { providerLabel: 'JIRA', operation: 'list' });
+      expect(Object.values(TICKET_ERROR)).to.not.include(error.name);
+    });
+
+    it('leaves a 400 on a comment unnamed, keeping the JIRA reason', () => {
+      const error = toTicketError(httpError(400, { errorMessages: ['Comment body is not valid.'] }), {
+        providerLabel: 'JIRA',
+        operation: 'comment',
+        ticketId: 'ACME-1',
+      });
+      expect(Object.values(TICKET_ERROR)).to.not.include(error.name);
+      expect(error.message).to.contain('Comment body is not valid.');
     });
 
     it('keeps an error that is already named', () => {
@@ -102,6 +139,11 @@ describe('ticketOperations', () => {
       expect(toIsoDateTime('2026-09-01T12:12:00.000+0200')).to.equal('2026-09-01T10:12:00.000Z');
     });
 
+    it('reads a negative offset and a zero offset', () => {
+      expect(toIsoDateTime('2026-09-01T12:12:00.000-0500')).to.equal('2026-09-01T17:12:00.000Z');
+      expect(toIsoDateTime('2026-09-01T12:12:00.000+0000')).to.equal('2026-09-01T12:12:00.000Z');
+    });
+
     it('keeps an unreadable value as it is, and an empty one empty', () => {
       expect(toIsoDateTime('not a date')).to.equal('not a date');
       expect(toIsoDateTime('')).to.equal('');
@@ -135,12 +177,13 @@ describe('ticketOperations', () => {
       const missing = path.join(tmpDir, 'missing.md');
       let error: any;
       try {
-        await readUploadFiles([existing, missing]);
+        await readUploadFiles([missing, existing]);
       } catch (e) {
         error = e;
       }
       expect(error, 'expected a rejection').to.exist;
       expect(error.message).to.contain('missing.md');
+      expect(error.cause, 'expected the read failure as the cause').to.exist;
     });
 
     it('rejects a folder given as a file', async () => {
@@ -151,6 +194,7 @@ describe('ticketOperations', () => {
         error = e;
       }
       expect(error, 'expected a rejection').to.exist;
+      expect(error.message).to.contain(tmpDir);
     });
 
     it('reads the body from --body-file', async () => {
