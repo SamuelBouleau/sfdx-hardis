@@ -305,6 +305,14 @@ The table below lists every sfdx-hardis command that supports `--agent`. Click t
 | [**hardis:source:push**](hardis/source/push.md)                                         | Push local SFDX sources to a scratch org                                                                      |
 | [**hardis:source:retrieve**](hardis/source/retrieve.md)                                 | Retrieve metadata from an org and update local SFDX sources                                                   |
 
+### Ticketing
+
+| Command                                               | What an agent can do                                                                                                                |
+|-------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| [**hardis:ticket:list**](hardis/ticket/list.md)       | List the tickets matching a query, page by page, with `--query "<JQL>" --max-results 50 --page-token <token> --agent --json`        |
+| [**hardis:ticket:attach**](hardis/ticket/attach.md)   | Upload one or more files on a ticket and optionally label it, with `--id ACME-123 --file draft.md --add-label <tag> --agent --json` |
+| [**hardis:ticket:comment**](hardis/ticket/comment.md) | Post a free-text comment on a ticket and optionally label it, with `--id ACME-123 --body-file status.md --agent --json`             |
+
 ---
 
 ## See Also

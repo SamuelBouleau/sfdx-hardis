@@ -458,7 +458,10 @@ nav:
           - push: hardis/source/push.md
           - retrieve: hardis/source/retrieve.md
       - hardis:ticket:
+          - attach: hardis/ticket/attach.md
+          - comment: hardis/ticket/comment.md
           - get: hardis/ticket/get.md
+          - list: hardis/ticket/list.md
       - hardis:work:
           - new: hardis/work/new.md
           - refresh: hardis/work/refresh.md

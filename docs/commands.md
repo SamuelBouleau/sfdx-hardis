@@ -262,9 +262,12 @@
 
 ## hardis:ticket
 
-| Command                                       | Title |
-|:----------------------------------------------|:------|
-| [**hardis:ticket:get**](hardis/ticket/get.md) |       |
+| Command                                               | Title |
+|:------------------------------------------------------|:------|
+| [**hardis:ticket:attach**](hardis/ticket/attach.md)   |       |
+| [**hardis:ticket:comment**](hardis/ticket/comment.md) |       |
+| [**hardis:ticket:get**](hardis/ticket/get.md)         |       |
+| [**hardis:ticket:list**](hardis/ticket/list.md)       |       |
 
 ## hardis:work
 

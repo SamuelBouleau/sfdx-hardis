@@ -3,6 +3,11 @@
 ## [beta] (main)
 
 - [Promotion branches](https://sfdx-hardis.cloudity.com/salesforce-devops-promotion-branches/) are no longer experimental: the feature is now in Beta, and the docs, the JSON schema and the VS Code labels say so.
+- Ticketing commands for agents and scripts, all usable with `--agent --json`. Their failures carry a stable name in the JSON error (`TicketNotFound`, `TicketProviderNotConfigured`, `TicketRateLimited`...), so a script can branch on it instead of parsing a message:
+  - [hardis:ticket:list](https://sfdx-hardis.cloudity.com/hardis/ticket/list/): **new command** that lists the tickets matching a JQL query, on JIRA Cloud only. `--max-results` caps a page (50 by default), and the `nextPageToken` of the output, passed back as is to `--page-token`, reads the next one. Without `--provider`, the only configured ticketing system is used.
+  - [hardis:ticket:attach](https://sfdx-hardis.cloudity.com/hardis/ticket/attach/): **new command** that uploads one or more files on a ticket (`--file` can be repeated), and can label the ticket in the same run with `--add-label`.
+  - [hardis:ticket:comment](https://sfdx-hardis.cloudity.com/hardis/ticket/comment/): **new command** that posts a free-text comment on a ticket, from `--body` or from a file with `--body-file`, and can label the ticket in the same run with `--add-label`.
+  - [hardis:ticket:get](https://sfdx-hardis.cloudity.com/hardis/ticket/get/): an unknown ticket and a missing ticketing configuration now fail with the names `TicketNotFound` and `TicketProviderNotConfigured`.
 
 ## [8.9.2] 2026-09-22
 
