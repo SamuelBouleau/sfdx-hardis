@@ -3,6 +3,7 @@ import { expect } from 'chai';
 import '../../../../src/common/ticketProvider/index.js';
 import TicketList, { buildTicketListResult } from '../../../../src/commands/hardis/ticket/list.js';
 import TicketAttach from '../../../../src/commands/hardis/ticket/attach.js';
+import TicketComment from '../../../../src/commands/hardis/ticket/comment.js';
 
 /**
  * The flag names and the JSON keys below are consumed by the Claude framework skills, developed in
@@ -34,5 +35,16 @@ describe('ticket commands contract', () => {
     expect(flags.file.required).to.equal(true);
     expect(flags.id.required).to.equal(true);
     expect(TicketAttach.requiresProject).to.equal(false);
+  });
+
+  it('ticket comment declares the frozen flags, --body and --body-file exclusive', () => {
+    const flags: any = TicketComment.flags;
+    for (const name of ['id', 'body', 'body-file', 'add-label', 'provider', 'agent']) {
+      expect(flags, name).to.have.property(name);
+    }
+    expect(flags.body.exactlyOne).to.deep.equal(['body', 'body-file']);
+    expect(flags['body-file'].exactlyOne).to.deep.equal(['body', 'body-file']);
+    expect(flags.id.required).to.equal(true);
+    expect(TicketComment.requiresProject).to.equal(false);
   });
 });
