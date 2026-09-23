@@ -4,7 +4,7 @@ import { expect } from 'chai';
 // extends TicketProviderRoot). Entering through the barrel resolves it in the order the app proves
 // to work; entering through a provider module would throw "Cannot access 'TicketProviderRoot'
 // before initialization".
-import { allTicketProviders, ticketDetailsProviderKeys, Ticket } from '../../../src/common/ticketProvider/index.js';
+import { allTicketProviders, ticketDetailsProviderKeys, Ticket, TicketProvider } from '../../../src/common/ticketProvider/index.js';
 import { AzureBoardsProvider } from '../../../src/common/ticketProvider/azureBoardsProvider.js';
 import { GenericTicketingProvider } from '../../../src/common/ticketProvider/genericProvider.js';
 import { JiraProvider } from '../../../src/common/ticketProvider/jiraProvider.js';
@@ -677,4 +677,59 @@ describe('ticket operations on providers that cannot do them', () => {
       expect((await rejectionOf(provider.addTicketLabel('ACME-1', 'tag'))).name, label).to.equal('TicketProviderNotSupported');
     }
   });
+});
+
+const NO_JIRA_ENV = { JIRA_HOST: '', JIRA_EMAIL: '', JIRA_TOKEN: '', JIRA_PAT: '', JIRA_CLIENT_ID: '', JIRA_CLIENT_SECRET: '' };
+
+// Starts from NO_JIRA_ENV, so a JIRA_PAT or client credentials set on the machine never leak in
+const JIRA_ENV = {
+  ...NO_JIRA_ENV,
+  JIRA_HOST: 'https://acme.atlassian.net',
+  JIRA_EMAIL: 'bot@acme.com',
+  JIRA_TOKEN: 'token',
+};
+
+describe('TicketProvider.resolveProvider', () => {
+  it('returns the JIRA connector for a JIRA key', withEnv(JIRA_ENV, async () => {
+    const { provider, providerClass } = await TicketProvider.resolveProvider({ ticketId: 'ACME-123' });
+    expect(providerClass.providerKey).to.equal('jira');
+    expect(provider).to.be.instanceOf(JiraProvider);
+  }));
+
+  it('returns the forced provider when no identifier is given', withEnv(JIRA_ENV, async () => {
+    const { providerClass } = await TicketProvider.resolveProvider({ providerKey: 'jira' });
+    expect(providerClass.providerKey).to.equal('jira');
+  }));
+
+  it('names an unconfigured provider TicketProviderNotConfigured', withEnv(NO_JIRA_ENV, async () => {
+    const error = await rejectionOf(TicketProvider.resolveProvider({ providerKey: 'jira' }));
+    expect(error.name).to.equal('TicketProviderNotConfigured');
+  }));
+
+  it('names an identifier no provider recognizes TicketNotFound', withEnv(JIRA_ENV, async () => {
+    const error = await rejectionOf(TicketProvider.resolveProvider({ ticketId: 'not a ticket' }));
+    expect(error.name).to.equal('TicketNotFound');
+  }));
+
+  // Blanks the other connectors too, so an Azure or ServiceNow setup on the machine cannot make it ambiguous
+  const ONLY_JIRA_ENV = {
+    ...JIRA_ENV,
+    SYSTEM_COLLECTIONURI: '',
+    SYSTEM_TEAMPROJECT: '',
+    CI_SFDX_HARDIS_AZURE_TOKEN: '',
+    SYSTEM_ACCESSTOKEN: '',
+    AZURE_DEVOPS_EXT_PAT: '',
+    SERVICENOW_URL: '',
+  };
+
+  it('takes the only configured provider when neither an identifier nor a provider is given', withEnv(ONLY_JIRA_ENV, async () => {
+    const { providerClass } = await TicketProvider.resolveProvider({});
+    expect(providerClass.providerKey).to.equal('jira');
+  }));
+
+  it('asks for --provider when several providers are configured', withEnv({ ...JIRA_ENV, ...SERVICENOW_ENV }, async () => {
+    const error = await rejectionOf(TicketProvider.resolveProvider({}));
+    expect(error.name).to.equal('TicketProviderNotConfigured');
+    expect(error.message).to.contain('--provider');
+  }));
 });

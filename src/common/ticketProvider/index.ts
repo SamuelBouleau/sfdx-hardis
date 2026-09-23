@@ -11,6 +11,7 @@ import { t } from '../utils/i18n.js';
 import { SfError } from "@salesforce/core";
 import { ServiceNowProvider } from "./serviceNowProvider.js";
 import { TicketDetails, TicketDetailsOptions } from "./ticketDetails.js";
+import { TICKET_ERROR } from "./ticketOperations.js";
 
 export type TicketProviderKey = "jira" | "azure" | "servicenow" | "generic";
 
@@ -118,6 +119,60 @@ export abstract class TicketProvider {
   }
 
   /**
+   * Picks the one connector able to handle a ticket operation.
+   *
+   * With `providerKey`, that connector is taken whatever the identifier looks like; otherwise the
+   * provider is deduced from the shape of `ticketId` (PROJ-123 -> JIRA, 1234 / AB-1234 -> Azure
+   * Boards, INC0012345 -> ServiceNow). With neither, the only configured connector is taken. Every failure is an SfError carrying a TICKET_ERROR name, so
+   * a caller can tell "nothing is configured" from "this ticket does not exist".
+   */
+  public static async resolveProvider(
+    options: { ticketId?: string; providerKey?: TicketProviderKey } = {}
+  ): Promise<{ provider: TicketProviderRoot; providerClass: TicketProviderClass }> {
+    const config = await getConfig("project");
+    const trimmedId = (options.ticketId || "").trim();
+    // Neither a provider nor an identifier (ticket list): every connector is a candidate, and the
+    // one that is configured wins
+    const shapeMatches = allTicketProviders.filter(
+      (provider) =>
+        provider.supportsTicketDetails &&
+        (options.providerKey
+          ? provider.providerKey === options.providerKey
+          : !trimmedId || provider.matchesTicketId(trimmedId, config))
+    );
+    if (shapeMatches.length === 0) {
+      throw new SfError(t('ticketDetailsUnknownIdShape', { ticketId: trimmedId }), TICKET_ERROR.notFound);
+    }
+    // A provider may be able to complete its own configuration (Azure Boards reads the organization
+    // and the project from the git remote). Runs before isAvailable(), which is synchronous and
+    // cannot look at the remote itself. Only the candidates matching the identifier are prepared,
+    // so a JIRA key never triggers a git call; with no identifier (ticket list), Azure's does run.
+    for (const provider of shapeMatches) {
+      if (provider.autoDetectFromGitRemote) {
+        await provider.autoDetectFromGitRemote();
+      }
+    }
+    const available = shapeMatches.filter((provider) => provider.isAvailable(config));
+    if (available.length === 0) {
+      const providers = shapeMatches.map((provider) => provider.providerLabel).join(", ");
+      const message = trimmedId
+        ? t('ticketDetailsProviderNotConfigured', { ticketId: trimmedId, providers })
+        : t('ticketListProviderNotConfigured', { providers });
+      throw new SfError(message, TICKET_ERROR.providerNotConfigured);
+    }
+    if (available.length > 1) {
+      // The contract has no "ambiguous" name: TicketProviderNotConfigured, and the message says why
+      const providers = available.map((provider) => provider.providerKey).join(", ");
+      const message = trimmedId
+        ? t('ticketDetailsAmbiguousProvider', { ticketId: trimmedId, providers })
+        : t('ticketListAmbiguousProvider', { providers });
+      throw new SfError(message, TICKET_ERROR.providerNotConfigured);
+    }
+    const providerClass = available[0];
+    return { provider: new providerClass(config), providerClass };
+  }
+
+  /**
    * Deep fetch of a single ticket, with its description, comments, links and attachments.
    *
    * The provider is deduced from the shape of the identifier (PROJ-123 -> JIRA, 1234 / AB-1234 ->
@@ -129,44 +184,8 @@ export abstract class TicketProvider {
     ticketId: string,
     options: TicketDetailsOptions & { providerKey?: TicketProviderKey } = {}
   ): Promise<TicketDetails | null> {
-    const config = await getConfig("project");
     const trimmedId = (ticketId || "").trim();
-    const shapeMatches = allTicketProviders.filter(
-      (provider) =>
-        provider.supportsTicketDetails &&
-        (options.providerKey ? provider.providerKey === options.providerKey : provider.matchesTicketId(trimmedId, config))
-    );
-    if (shapeMatches.length === 0) {
-      throw new SfError(t('ticketDetailsUnknownIdShape', { ticketId: trimmedId }));
-    }
-    // A provider may be able to complete its own configuration (Azure Boards reads the organization
-    // and the project from the git remote). Runs before isAvailable(), which is synchronous and
-    // cannot look at the remote itself. Only the candidates matching the identifier are prepared,
-    // so a JIRA key never triggers a git call.
-    for (const provider of shapeMatches) {
-      if (provider.autoDetectFromGitRemote) {
-        await provider.autoDetectFromGitRemote();
-      }
-    }
-    const available = shapeMatches.filter((provider) => provider.isAvailable(config));
-    if (available.length === 0) {
-      throw new SfError(
-        t('ticketDetailsProviderNotConfigured', {
-          ticketId: trimmedId,
-          providers: shapeMatches.map((provider) => provider.providerLabel).join(", "),
-        })
-      );
-    }
-    if (available.length > 1) {
-      throw new SfError(
-        t('ticketDetailsAmbiguousProvider', {
-          ticketId: trimmedId,
-          providers: available.map((provider) => provider.providerKey).join(", "),
-        })
-      );
-    }
-    const providerClass = available[0];
-    const provider = new providerClass(config);
+    const { provider, providerClass } = await this.resolveProvider({ ticketId: trimmedId, providerKey: options.providerKey });
     uxLog("action", this, c.cyan('[TicketProvider] ' + t('ticketDetailsFetching', { ticketId: trimmedId, provider: providerClass.providerLabel })));
     return provider.getTicketDetails(trimmedId, options);
   }
