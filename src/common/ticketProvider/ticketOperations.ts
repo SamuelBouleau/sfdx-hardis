@@ -20,9 +20,13 @@ export const TICKET_ERROR = {
   notFound: "TicketNotFound",
   attachmentTooLarge: "TicketAttachmentTooLarge",
   rateLimited: "TicketRateLimited",
+  /** The ticket belongs to a project outside --allowed-projects: nothing was written */
+  outOfScope: "TicketOutOfScope",
+  /** --skip-if-marked: the ticket already carries the marker label or a prefixed comment of this account */
+  alreadyMarked: "TicketAlreadyMarked",
 } as const;
 
-export type TicketOperation = "list" | "attach" | "comment" | "label";
+export type TicketOperation = "list" | "attach" | "comment" | "label" | "whoami" | "meta" | "transition" | "points";
 
 /** One entry of `sf hardis ticket list` */
 export interface TicketSummary {
@@ -36,18 +40,28 @@ export interface TicketSummary {
   created: string;
   updated: string;
   labels: string[];
+  /** Account id of the assignee (JIRA accountId, or user name on Server / Data Center; Azure identity id) */
+  assigneeId: string | null;
+  /** JIRA project key, or Azure Boards team project */
+  project: string;
+  /** Azure Boards area path; null on JIRA */
+  areaPath: string | null;
 }
 
 export interface TicketSearchOptions {
   maxResults: number;
   /** Opaque cursor returned by the previous page: relayed as is, never parsed */
   pageToken?: string | null;
+  /** When set, the query is bounded to these projects and any result outside them is dropped */
+  allowedProjects?: string[] | null;
 }
 
 export interface TicketSearchResult {
   tickets: TicketSummary[];
   nextPageToken: string | null;
   truncated: boolean;
+  /** Set when nothing matched, with what to check: an empty result is often a wrong project */
+  warning?: string | null;
 }
 
 export interface TicketUploadFile {
@@ -75,6 +89,10 @@ const NOT_SUPPORTED_KEYS: Record<TicketOperation, string> = {
   attach: "ticketAttachNotSupported",
   comment: "ticketCommentNotSupported",
   label: "ticketLabelNotSupported",
+  whoami: "ticketWhoamiNotSupported",
+  meta: "ticketMetaNotSupported",
+  transition: "ticketTransitionNotSupported",
+  points: "ticketPointsNotSupported",
 };
 
 export function ticketProviderNotSupported(providerLabel: string, operation: TicketOperation): SfError {
@@ -82,7 +100,7 @@ export function ticketProviderNotSupported(providerLabel: string, operation: Tic
 }
 
 export function httpStatusOf(error: any): number | undefined {
-  const status = error?.status ?? error?.response?.status;
+  const status = error?.status ?? error?.statusCode ?? error?.response?.status;
   return typeof status === "number" ? status : undefined;
 }
 
@@ -95,6 +113,10 @@ export function serverMessageOf(error: any): string {
   }
   if (data?.errors && typeof data.errors === "object") {
     messages.push(...Object.values(data.errors).map(String));
+  }
+  // azure-devops-node-api: the parsed answer of the server is on result
+  if (typeof error?.result?.message === "string") {
+    messages.push(error.result.message);
   }
   return messages.filter(Boolean).join(" | ") || error?.message || String(error);
 }

@@ -9,6 +9,7 @@ import { isCI, uxLog } from '../../../common/utils/index.js';
 import { prompts } from '../../../common/utils/prompts.js';
 import { TicketProvider, TicketProviderKey, ticketDetailsProviderKeys } from '../../../common/ticketProvider/index.js';
 import { TicketDetails, renderTicketDetailsMarkdown } from '../../../common/ticketProvider/ticketDetails.js';
+import { assertProjectAllowed, isTicketMarked, parseAllowedProjects } from '../../../common/ticketProvider/ticketQualify.js';
 import { t } from '../../../common/utils/i18n.js';
 
 Messages.importMessagesDirectoryFromMetaUrl(import.meta.url);
@@ -32,6 +33,13 @@ It returns:
 - **Subtasks and linked items**, with their status.
 - **Attachments**, downloaded next to the report so images can be looked at and documents opened.
 - **Possible manual actions:** the lines of the ticket mentioning an operation that deployable metadata will not carry (permission set assignment, org setting, scheduled job, data load...). Each one that survives the design phase should become an [sfdx-hardis deployment action](${'https://sfdx-hardis.cloudity.com/hardis/project/action/create/'}), so it is replayed in every org rather than done by hand once.
+
+### Identifiers, scope and marker
+
+- \`project\`, \`assigneeId\`, \`reporterId\` and \`comments[].authorId\` carry the account ids, the same ones \`ticket whoami\` returns (JIRA Cloud \`accountId\`, JIRA Server / Data Center user name, Azure Boards identity id). On Azure Boards \`project\` is the team project of the work item itself, which may differ from the project of the repository.
+- \`--allowed-projects a,b\` fails with \`TicketOutOfScope\` when the ticket belongs to another project.
+- \`--marker "<prefix>"\` and \`--marker-label <label>\` fill \`markedByMe\`: true when the ticket carries the label, or when the authenticated account already posted a comment starting with the prefix (emoji and whitespace ignored). Comments of other accounts never count. Without these flags \`markedByMe\` is null.
+- \`--skip-comments\` does not fetch the comments (faster on long tickets). With \`--marker\` they are still read for the check, but not returned.
 
 ### Provider detection
 
@@ -79,6 +87,7 @@ sf hardis ticket get --id ACME-4567 --agent --json
     '$ sf hardis:ticket:get --id INC0012345 --output-file docs/INC0012345/ticket-extract.md',
     '$ sf hardis:ticket:get --id AB-4567 --provider azure --attachments-dir ./ticket-attachments',
     '$ sf hardis:ticket:get --id ACME-4567 --skip-attachments --agent --json',
+    '$ sf hardis:ticket:get --id ACME-4567 --allowed-projects ACME --marker "Automatic qualification" --marker-label ia-qualified --skip-attachments --agent --json',
   ];
 
   public static flags: any = {
@@ -101,6 +110,19 @@ sf hardis ticket get --id ACME-4567 --agent --json
     }),
     'attachments-dir': Flags.string({
       description: 'Folder the attachments are downloaded into. Defaults to a temporary folder, or to <output-file folder>/attachments when --output-file is set',
+    }),
+    'allowed-projects': Flags.string({
+      description: 'Comma-separated projects the ticket must belong to (TicketOutOfScope otherwise)',
+    }),
+    marker: Flags.string({
+      description: 'Comment prefix: markedByMe is true when the authenticated account already posted a comment starting with it',
+    }),
+    'marker-label': Flags.string({
+      description: 'Label (Azure Boards tag): markedByMe is true when the ticket carries it',
+    }),
+    'skip-comments': Flags.boolean({
+      default: false,
+      description: 'Do not return the comments (faster on long tickets)',
     }),
     'skip-attachments': Flags.boolean({
       default: false,
@@ -135,15 +157,37 @@ sf hardis ticket get --id ACME-4567 --agent --json
     const outputFile = flags['output-file'] || null;
     const attachmentsDir = flags['attachments-dir'] || (outputFile ? path.join(path.dirname(outputFile), 'attachments') : undefined);
 
+    const allowedProjects = parseAllowedProjects(flags['allowed-projects']);
+    const marker = flags.marker || null;
+    const markerLabel = flags['marker-label'] || null;
+    const skipComments = flags['skip-comments'] === true;
+    const providerKey = flags.provider as TicketProviderKey | undefined;
     const details = await TicketProvider.getTicketDetails(ticketId, {
-      providerKey: flags.provider as TicketProviderKey | undefined,
+      providerKey,
       downloadAttachments: flags['skip-attachments'] !== true,
       attachmentsDir,
       maxAttachmentBytes: flags['max-attachment-size'] * 1024 * 1024,
+      // The prefix check needs the comments even when they are not returned
+      skipComments: skipComments && !marker,
     });
 
     if (!details) {
       throw new SfError(t('ticketGetNotFound', { ticketId }));
+    }
+    assertProjectAllowed(details.id, details.project, allowedProjects);
+    if (marker || markerLabel) {
+      const { provider } = await TicketProvider.resolveProvider({ ticketId, providerKey });
+      const myId = marker ? (await provider.whoAmI()).id : null;
+      details.markedByMe = isTicketMarked({
+        labels: details.labels,
+        comments: details.comments.map((comment) => ({ authorId: comment.authorId ?? null, body: comment.body })),
+        myId,
+        prefix: marker,
+        label: markerLabel,
+      });
+    }
+    if (skipComments) {
+      details.comments = [];
     }
 
     let writtenFile: string | null = null;

@@ -19,6 +19,15 @@ import {
   TicketUploadFile,
   ticketProviderNotSupported,
 } from "./ticketOperations.js";
+import type {
+  TicketCommentOptions,
+  TicketCommentResult,
+  TicketIdentity,
+  TicketPointsOptions,
+  TicketProjectMeta,
+  TicketProjectSummary,
+  TicketStepResult,
+} from "./ticketQualify.js";
 import { t } from '../utils/i18n.js';
 
 // Issues met while collecting ticket details (ex: expired JIRA token), so the Pull Request
@@ -119,8 +128,36 @@ export abstract class TicketProviderRoot {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  public async addTicketComment(_ticketId: string, _body: string): Promise<{ commentId: string }> {
+  public async addTicketComment(_ticketId: string, _body: string, _options: TicketCommentOptions = {}): Promise<TicketCommentResult> {
     throw ticketProviderNotSupported(this.getLabel(), "comment");
+  }
+
+  /** Account the configured credential authenticates as */
+  public async whoAmI(): Promise<TicketIdentity> {
+    throw ticketProviderNotSupported(this.getLabel(), "whoami");
+  }
+
+  /** Projects the credential can see */
+  public async listProjects(): Promise<TicketProjectSummary[]> {
+    throw ticketProviderNotSupported(this.getLabel(), "meta");
+  }
+
+  /** Issue types, statuses and statuses per type of one project */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  public async getProjectMeta(_project: string): Promise<TicketProjectMeta> {
+    throw ticketProviderNotSupported(this.getLabel(), "meta");
+  }
+
+  /** Moves the ticket to the status named (translated name, original name or id); returns the status reached */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  public async transitionTicket(_ticketId: string, _status: string): Promise<string> {
+    throw ticketProviderNotSupported(this.getLabel(), "transition");
+  }
+
+  /** Writes the story points; never replaces a filled value unless options.overwrite */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  public async setTicketPoints(_ticketId: string, _points: number, _options: TicketPointsOptions = {}): Promise<TicketStepResult> {
+    throw ticketProviderNotSupported(this.getLabel(), "points");
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

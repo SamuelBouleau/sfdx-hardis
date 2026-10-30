@@ -27,7 +27,7 @@ describe('ticket commands contract', () => {
 
   it('ticket list returns the keys of the contract, in order', () => {
     const result = buildTicketListResult('jira', 'project = ACME', { tickets: [], nextPageToken: null, truncated: false });
-    expect(Object.keys(result)).to.deep.equal(['provider', 'query', 'totalFetched', 'nextPageToken', 'truncated', 'tickets']);
+    expect(Object.keys(result)).to.deep.equal(['provider', 'query', 'totalFetched', 'nextPageToken', 'truncated', 'tickets', 'warning']);
     expect(result.totalFetched).to.equal(0);
   });
 

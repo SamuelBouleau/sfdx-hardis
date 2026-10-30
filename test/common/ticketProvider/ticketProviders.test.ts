@@ -667,7 +667,8 @@ async function rejectionOf(promise: Promise<unknown>): Promise<any> {
 }
 
 describe('ticket operations on providers that cannot do them', () => {
-  const providers = () => [new AzureBoardsProvider({}), new ServiceNowProvider({}), new GenericTicketingProvider({})];
+  // Azure Boards now lists, comments and labels: only attach stays unsupported there
+  const providers = () => [new ServiceNowProvider({}), new GenericTicketingProvider({})];
 
   it('fail with TicketProviderNotSupported, never with an empty result', async () => {
     for (const provider of providers()) {
@@ -676,7 +677,11 @@ describe('ticket operations on providers that cannot do them', () => {
       expect((await rejectionOf(provider.addTicketAttachments('ACME-1', []))).name, label).to.equal('TicketProviderNotSupported');
       expect((await rejectionOf(provider.addTicketComment('ACME-1', 'text'))).name, label).to.equal('TicketProviderNotSupported');
       expect((await rejectionOf(provider.addTicketLabel('ACME-1', 'tag'))).name, label).to.equal('TicketProviderNotSupported');
+      for (const call of [() => provider.whoAmI(), () => provider.listProjects(), () => provider.getProjectMeta('ACME'), () => provider.transitionTicket('ACME-1', 'Done'), () => provider.setTicketPoints('ACME-1', 3)]) {
+        expect((await rejectionOf(call())).name, label).to.equal('TicketProviderNotSupported');
+      }
     }
+    expect((await rejectionOf(new AzureBoardsProvider({}).addTicketAttachments('1', []))).name).to.equal('TicketProviderNotSupported');
   });
 });
 
@@ -832,6 +837,9 @@ describe('JiraProvider.searchTickets', () => {
         created: '2026-09-01T10:12:00.000Z',
         updated: '2026-09-18T08:03:00.000Z',
         labels: ['backlog'],
+        assigneeId: null,
+        project: 'ACME',
+        areaPath: null,
       },
     ]);
     expect(result.nextPageToken).to.equal(null);
@@ -875,21 +883,21 @@ describe('JiraProvider.searchTickets', () => {
     expect(received.jql).to.equal('project = ACME');
   }));
 
-  it('refuses Jira Server / Data Center without calling it', withEnv({ ...JIRA_ENV, JIRA_HOST: 'https://jira.acme.com' }, async () => {
-    let called = false;
+  it('searches Jira Server / Data Center with offsets carried by the page token', withEnv({ ...JIRA_ENV, JIRA_HOST: 'https://jira.acme.com' }, async () => {
+    const calls: any[] = [];
     const provider = stubbedJira({
       issueSearch: {
-        searchForIssuesUsingJqlEnhancedSearchPost: async () => {
-          called = true;
-          return { issues: [] };
+        searchForIssuesUsingJqlPost: async (parameters: any) => {
+          calls.push(parameters);
+          return { issues: [jiraIssue('ACME-1'), jiraIssue('ACME-2')], total: 5 };
         },
       },
     });
-    const error = await rejectionOf(provider.searchTickets('project = ACME', { maxResults: 50 }));
-    expect(error.name).to.equal('TicketProviderNotSupported');
-    // The host is only interpolated by the Server / Data Center message, not by the generic refusal
-    expect(error.message).to.contain('jira.acme.com');
-    expect(called).to.equal(false);
+    const result = await provider.searchTickets('project = ACME', { maxResults: 2, pageToken: '1' });
+    expect(calls[0].startAt).to.equal(1);
+    expect(result.tickets.map((ticket) => ticket.id)).to.deep.equal(['ACME-1', 'ACME-2']);
+    expect(result.nextPageToken).to.equal('3');
+    expect(result.truncated).to.equal(true);
   }));
 
   it('names a rejected query TicketQueryInvalid, keeping the JIRA message', withEnv(JIRA_ENV, async () => {
@@ -1112,7 +1120,7 @@ describe('JiraProvider.addTicketComment', () => {
   it('posts ADF on Jira Cloud and returns the comment id', withEnv(JIRA_ENV, async () => {
     const { provider, posted } = recordingJira();
     const result = await provider.addTicketComment('ACME-123', 'Status: estimated\n\nSee attachment');
-    expect(result).to.deep.equal({ commentId: '10233' });
+    expect(result).to.deep.equal({ commentId: '10233', url: 'https://acme.atlassian.net/browse/ACME-123?focusedCommentId=10233' });
     expect(posted[0].issueIdOrKey).to.equal('ACME-123');
     expect(posted[0].comment.type).to.equal('doc');
     expect(posted[0].comment.content).to.have.length(2);
