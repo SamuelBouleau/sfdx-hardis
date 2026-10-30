@@ -2,6 +2,8 @@
 
 ## [beta] (main)
 
+- [hardis:ticket:post-comment](https://sfdx-hardis.cloudity.com/hardis/ticket/post-comment/) and the deployment comments on JIRA Server / Data Center: a `{code}` or `{noformat}` line inside a code block, or a brace inside inline code, no longer ends the block early and turns the rest of the comment into wiki markup.
+
 ## [8.21.0] 2026-10-30
 
 - [hardis:project:deploy:smart](https://sfdx-hardis.cloudity.com/hardis/project/deploy/smart/): deployment keywords in the Pull Request description or the latest commit (like NO_DELTA or nodelta) match in any case, and are ignored inside HTML comments and code blocks ([#2423](https://github.com/hardisgroupcom/sfdx-hardis/issues/2423)).
