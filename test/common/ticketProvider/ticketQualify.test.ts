@@ -21,6 +21,7 @@ import {
   withAdfMention,
   withCommentPrefix,
   withHtmlHeadingSpacers,
+  mentionLead,
   withHtmlMention,
   withWikiMention,
 } from '../../../src/common/ticketProvider/utils/ticketQualify.js';
@@ -31,12 +32,12 @@ import TicketGet from '../../../src/commands/hardis/ticket/get.js';
 import TicketMeta from '../../../src/commands/hardis/ticket/meta.js';
 import TicketWhoami from '../../../src/commands/hardis/ticket/whoami.js';
 import TicketLabel from '../../../src/commands/hardis/ticket/label.js';
+import { t } from '../../../src/common/utils/i18n.js';
 
 /*
- * Port of the acceptance tests of the cloudity-qualify-ticket adapters (providers/jira.mjs and
- * azure.mjs, commit 5da3b01). Each test name starts with the baseline test it covers: [J<n>] for
- * jira.test.mjs, [A<n>] for azure.test.mjs, numbered in file order. The mapping, including the
- * tests that moved to the skill or were dropped, is in test-mapping.md of the qualify-ticket project folder.
+ * Qualification options of the ticket commands: project scope, marker check, strict markdown,
+ * mentions, status and story points steps, and the JIRA / Azure Boards operations behind them.
+ * Network calls are replaced by stubbed jira.js and azure-devops-node-api clients.
  */
 
 const NO_JIRA_ENV = { JIRA_HOST: '', JIRA_EMAIL: '', JIRA_TOKEN: '', JIRA_PAT: '', JIRA_CLIENT_ID: '', JIRA_CLIENT_SECRET: '' };
@@ -48,7 +49,7 @@ const AZURE_ENV = {
   CI_SFDX_HARDIS_AZURE_TOKEN: 'token',
 };
 const GUID = '0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b';
-const PREFIX = '🤖 Qualification automatique (Claude)';
+const PREFIX = '🤖 Qualification préliminaire (bot)';
 
 function withEnv(vars: Record<string, string>, run: () => Promise<void>): () => Promise<void> {
   return async () => {
@@ -105,7 +106,7 @@ function stubbedAzure(wit: any, extra: any = {}): AzureBoardsProvider {
 // ---------------------------------------------------------------------------------------------
 
 describe('ticket qualification helpers', () => {
-  it('[J3][J22] scopeJql bounds the query to the projects, keeps ORDER BY, quoted ORDER BY stays a filter', () => {
+  it('scopeJql bounds the query to the projects, keeps ORDER BY, quoted ORDER BY stays a filter', () => {
     expect(scopeJql(['ACME', 'OPS'], 'status = Open ORDER BY priority DESC')).to.equal(
       'project in ("ACME", "OPS") AND (status = Open) ORDER BY priority DESC'
     );
@@ -113,21 +114,21 @@ describe('ticket qualification helpers', () => {
     expect(scopeJql(['ACME'], 'summary ~ "ORDER BY x"')).to.equal('project in ("ACME") AND (summary ~ "ORDER BY x") ORDER BY created ASC');
   });
 
-  it('[J16] scopeJql refuses unbalanced parentheses outside quoted strings', () => {
+  it('scopeJql refuses unbalanced parentheses outside quoted strings', () => {
     expect(scopeJql(['ACME'], 'summary ~ "a)"')).to.contain('(summary ~ "a)")');
     for (const query of ['status = Open) OR (project = OTHER', 'status = "Open', '((a = 1)']) {
       expect(() => scopeJql(['ACME'], query), query).to.throw().with.property('name', TICKET_ERROR.queryInvalid);
     }
   });
 
-  it('[A3] assertWiqlCondition refuses statement keywords and unbalanced input', () => {
+  it('assertWiqlCondition refuses statement keywords and unbalanced input', () => {
     for (const condition of ['SELECT [System.Id] FROM WorkItems', "[System.State] = 'New' ORDER BY [System.Id]", 'a = 1 ASOF x', '(a = 1']) {
       expect(() => assertWiqlCondition(condition), condition).to.throw().with.property('name', TICKET_ERROR.queryInvalid);
     }
     expect(assertWiqlCondition("[System.Title] CONTAINS 'select from'")).to.equal("[System.Title] CONTAINS 'select from'");
   });
 
-  it('[A6][A5] scopeWiql bounds the condition to the projects, quotes escaped', () => {
+  it('scopeWiql bounds the condition to the projects, quotes escaped', () => {
     expect(scopeWiql(["O'Brien", 'CRM'], "[System.State] = 'New'")).to.equal(
       "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] IN ('O''Brien', 'CRM') AND ([System.State] = 'New') ORDER BY [System.CreatedDate] ASC"
     );
@@ -140,12 +141,12 @@ describe('ticket qualification helpers', () => {
     expect(() => parseAllowedProjects(' , ')).to.throw();
   });
 
-  it('[J5][J36][A11] marker: label (any case), or own prefixed comment despite emoji, spacing and decomposed accents', () => {
-    const own = { authorId: 'me', body: 'Qualification  automatique (Claude)\n\nGrid...' };
+  it('marker: label (any case), or own prefixed comment despite emoji, spacing and decomposed accents', () => {
+    const own = { authorId: 'me', body: 'Qualification  préliminaire (bot)\n\nGrid...' };
     expect(isTicketMarked({ labels: ['IA-Qualifie'], comments: [], myId: 'me', prefix: PREFIX, label: 'ia-qualifie' })).to.equal(true);
     expect(isTicketMarked({ labels: [], comments: [own], myId: 'me', prefix: PREFIX })).to.equal(true);
     // NFD accents in the stored comment
-    const decomposed = { authorId: 'me', body: 'Qualification automatique (Claude)'.normalize('NFD') };
+    const decomposed = { authorId: 'me', body: 'Qualification préliminaire (bot)'.normalize('NFD') };
     expect(isTicketMarked({ labels: [], comments: [decomposed], myId: 'me', prefix: PREFIX })).to.equal(true);
     // Somebody else's comment, or no identity: never counts
     expect(isTicketMarked({ labels: [], comments: [{ ...own, authorId: 'other' }], myId: 'me', prefix: PREFIX })).to.equal(false);
@@ -153,10 +154,10 @@ describe('ticket qualification helpers', () => {
     expect(isTicketMarked({ labels: ['other'], comments: [], myId: 'me', prefix: PREFIX, label: 'ia-qualifie' })).to.equal(false);
   });
 
-  it('[J9] prefix: added as first line, never twice', () => {
+  it('prefix: added as first line, never twice', () => {
     expect(withCommentPrefix('Body', PREFIX)).to.equal(`${PREFIX}\n\nBody`);
     expect(withCommentPrefix(`${PREFIX}\n\nBody`, PREFIX)).to.equal(`${PREFIX}\n\nBody`);
-    expect(withCommentPrefix('Qualification automatique (Claude)\n\nBody', PREFIX)).to.equal('Qualification automatique (Claude)\n\nBody');
+    expect(withCommentPrefix('Qualification préliminaire (bot)\n\nBody', PREFIX)).to.equal('Qualification préliminaire (bot)\n\nBody');
     expect(withCommentPrefix('Body', null)).to.equal('Body');
   });
 
@@ -178,7 +179,7 @@ describe('ticket qualification helpers', () => {
   const strictHtml = async (markdown: string) => withHtmlHeadingSpacers(await convertMarkdownToHtml(toStrictMarkdown(markdown)));
   const adfNodes = (node: any): any[] => [node, ...(node.content || []).flatMap(adfNodes)];
 
-  it('[J7] strict markdown to ADF: heading, bullets, numbered list, bold and code; hostile text stays literal', () => {
+  it('strict markdown to ADF: heading, bullets, numbered list, bold and code; hostile text stays literal', () => {
     const doc = strictAdf('# Title\n\nSome **bold** and `code`\n\n- one\n- two\n\n1. first');
     expect(doc.content!.map((node) => node.type)).to.deep.equal(['heading', 'paragraph', 'bulletList', 'orderedList']);
     expect(doc.content![1].content).to.deep.equal([
@@ -193,7 +194,7 @@ describe('ticket qualification helpers', () => {
     expect(nodes.filter((node) => node.type === 'text').map((node) => node.text).join('')).to.equal(HOSTILE);
   });
 
-  it('[J27][J48] strict markdown to wiki: headings, bullets, bold, code; every wiki special of the text escaped', () => {
+  it('strict markdown to wiki: headings, bullets, bold, code; every wiki special of the text escaped', () => {
     expect(strictWiki('## Title\n\n- **one**\n- `two`\n\nText')).to.equal('h2. Title\n\n* *one*\n* {{two}}\n\nText');
     const wiki = strictWiki(HOSTILE);
     // No link, image, mention, macro or monospace span can open: every bracket, brace, ! and ~ is escaped
@@ -201,14 +202,14 @@ describe('ticket qualification helpers', () => {
     expect(wiki.replace(/\\(.)/g, '$1')).to.equal(HOSTILE);
   });
 
-  it('[J48] strict markdown: a code block and nested backticks stay literal text, never a {code} block', () => {
+  it('strict markdown: a code block and nested backticks stay literal text, never a {code} block', () => {
     const wiki = strictWiki('```\n{code}\n```\n\n```` ```inner``` ````');
     expect(wiki).to.not.contain('{noformat}');
     expect(wiki).to.not.match(/(^|[^\\])\{/);
     expect(strictAdf('```\n{code}\n```').content![0].type).to.equal('paragraph');
   });
 
-  it('[A10][A28] strict markdown to HTML: subset, spacer before each heading but the first, numbered lists, text escaped', async () => {
+  it('strict markdown to HTML: subset, spacer before each heading but the first, numbered lists, text escaped', async () => {
     expect(await strictHtml('# A\n\ntext\n\n## B\n\n1. x\n2. y\n\n- z')).to.equal(
       '<h1>A</h1>\n<p>text</p>\n<div><br></div><h2>B</h2>\n<ol>\n<li>x</li>\n<li>y</li>\n</ol>\n<ul>\n<li>z</li>\n</ul>\n'
     );
@@ -218,19 +219,30 @@ describe('ticket qualification helpers', () => {
     expect(html).to.contain('&lt;img src=x onerror=alert(1)&gt;');
   });
 
-  it('[J56][A29] mentions: ADF node and [~name] after the first block, GUID only on Azure, malformed ids dropped', () => {
+  it('mentions: ADF node and [~name] after the first block, GUID only on Azure, malformed ids dropped', () => {
     const doc = withAdfMention(markdownToAdf('Prefix\n\nBody'), { id: '5b10:abc-1', displayName: 'Ann' });
     expect(doc.content[1].content[1]).to.deep.equal({ type: 'mention', attrs: { id: '5b10:abc-1', text: '@Ann' } });
     expect(withAdfMention(markdownToAdf('P'), { id: 'bad id"', displayName: 'x' }).content).to.have.length(1);
-    expect(withWikiMention('Prefix\n\nBody', { id: 'ann.dupont', displayName: null })).to.equal('Prefix\n\nPour : [~ann.dupont]\n\nBody');
+    expect(withWikiMention('Prefix\n\nBody', { id: 'ann.smith', displayName: null }, 'Pour : ')).to.equal('Prefix\n\nPour : [~ann.smith]\n\nBody');
     expect(withWikiMention('Prefix', { id: 'a]b', displayName: null })).to.equal('Prefix');
-    const html = withHtmlMention('<p>Prefix</p><p>Body</p>', { id: GUID, displayName: '<Ann>' });
+    const html = withHtmlMention('<p>Prefix</p><p>Body</p>', { id: GUID, displayName: '<Ann>' }, 'Pour : ');
     expect(html).to.equal(`<p>Prefix</p><p>Pour : <a href="#" data-vss-mention="version:2.0,${GUID}">@&lt;Ann&gt;</a></p><p>Body</p>`);
     expect(withHtmlMention('<p>P</p>', { id: 'not-a-guid', displayName: 'x' })).to.equal('<p>P</p>');
     expect(withHtmlMention('<p>P</p>', null)).to.equal('<p>P</p>');
   });
 
-  it('[J24] visibility: role or group with a value, anything else refused', () => {
+  it('mention label: a translation of the CLI language by default, the caller text wins, escaped in wiki and HTML', () => {
+    expect(mentionLead()).to.equal(t('ticketMentionLead'));
+    expect(mentionLead('Pour : ')).to.equal('Pour : ');
+    const assignee = { id: 'ann', displayName: null };
+    expect(withWikiMention('P\n\nB', assignee)).to.equal(`P\n\n${t('ticketMentionLead')}[~ann]\n\nB`);
+    expect(withWikiMention('P', assignee, '[~admin] {html}*x*')).to.equal('P\n\n\\[\\~admin\\] \\{html\\}\\*x\\*[~ann]');
+    expect(withHtmlMention('<p>P</p>', { id: GUID, displayName: 'Ann' }, '<b>@boss</b> ')).to.contain('<p>&lt;b&gt;&#64;boss&lt;/b&gt; <a href="#"');
+    const doc = withAdfMention(markdownToAdf('P'), { id: 'acc-1', displayName: 'Ann' }, '');
+    expect(doc.content[1].content.map((node: any) => node.type)).to.deep.equal(['mention']);
+  });
+
+  it('visibility: role or group with a value, anything else refused', () => {
     expect(parseCommentVisibility('role:Developers')).to.deep.equal({ type: 'role', value: 'Developers' });
     expect(parseCommentVisibility('group:jira-users')).to.deep.equal({ type: 'group', value: 'jira-users' });
     expect(parseCommentVisibility(undefined)).to.equal(null);
@@ -239,7 +251,7 @@ describe('ticket qualification helpers', () => {
     }
   });
 
-  it('[A16] retryReadOn5xx: one retry on 5xx, none on 4xx', async () => {
+  it('retryReadOn5xx: one retry on 5xx, none on 4xx', async () => {
     let calls = 0;
     const flaky = async () => {
       calls++;
@@ -280,7 +292,7 @@ const jiraIssue = (key: string, project = key.split('-')[0]) => ({
 });
 
 describe('JiraProvider qualification operations', () => {
-  it('[J13][J20] search (Cloud): bounded JQL sent, results of other projects dropped', withEnv(JIRA_ENV, async () => {
+  it('search (Cloud): bounded JQL sent, results of other projects dropped', withEnv(JIRA_ENV, async () => {
     const calls: any[] = [];
     const provider = stubbedJira({
       issueSearch: {
@@ -297,7 +309,7 @@ describe('JiraProvider qualification operations', () => {
     expect(result.warning ?? null).to.equal(null);
   }));
 
-  it('[J32] search (Server/DC): /rest/api/2/search, other projects dropped, empty result warned', withEnv(JIRA_DC_ENV, async () => {
+  it('search (Server/DC): /rest/api/2/search, other projects dropped, empty result warned', withEnv(JIRA_DC_ENV, async () => {
     const calls: any[] = [];
     const provider = stubbedJira({
       issueSearch: {
@@ -313,7 +325,7 @@ describe('JiraProvider qualification operations', () => {
     expect(result.warning).to.contain('ACME');
   }));
 
-  it('[J8][J33] get: project, account ids of assignee, reporter and comment authors (Cloud accountId, Server name)', withEnv(JIRA_DC_ENV, async () => {
+  it('get: project, account ids of assignee, reporter and comment authors (Cloud accountId, Server name)', withEnv(JIRA_DC_ENV, async () => {
     const provider = stubbedJira({
       issues: {
         getIssue: async () => ({
@@ -321,7 +333,7 @@ describe('JiraProvider qualification operations', () => {
           fields: {
             summary: 'S',
             project: { key: 'ACME' },
-            assignee: { name: 'ann.dupont', key: 'JIRAUSER1', displayName: 'Ann' },
+            assignee: { name: 'ann.smith', key: 'JIRAUSER1', displayName: 'Ann' },
             reporter: { accountId: 'acc-9', displayName: 'Bob' },
             labels: [],
           },
@@ -334,7 +346,7 @@ describe('JiraProvider qualification operations', () => {
     });
     const details = await provider.getTicketDetails('ACME-7', { downloadAttachments: false });
     expect(details!.project).to.equal('ACME');
-    expect(details!.assigneeId).to.equal('ann.dupont');
+    expect(details!.assigneeId).to.equal('ann.smith');
     expect(details!.reporterId).to.equal('acc-9');
     expect(details!.comments[0].authorId).to.equal('bot');
     expect(isTicketMarked({ labels: [], comments: details!.comments.map((c) => ({ authorId: c.authorId!, body: c.body })), myId: 'bot', prefix: PREFIX })).to.equal(true);
@@ -356,7 +368,7 @@ describe('JiraProvider qualification operations', () => {
     expect(details!.project).to.equal('ACME');
   }));
 
-  it('[J9][J23] comment (Cloud, markdown): ADF body, mention, visibility; public by default', withEnv(JIRA_ENV, async () => {
+  it('comment (Cloud, markdown): ADF body, mention, visibility; public by default', withEnv(JIRA_ENV, async () => {
     const posted: any[] = [];
     const provider = stubbedJira({
       issueComments: {
@@ -377,11 +389,11 @@ describe('JiraProvider qualification operations', () => {
     expect(posted[0].visibility).to.deep.equal({ type: 'role', value: 'Developers' });
     await provider.postComment('ACME-1', 'x');
     expect(posted[1]).to.not.have.property('visibility');
-    // [Q12] Without --marker, no tag of any kind is added to the comment
+    // Without --marker, no tag of any kind is added to the comment
     expect(JSON.stringify(posted[1].comment)).to.not.contain('sfdx-hardis:');
   }));
 
-  it('[J34] comment (Server/DC, markdown): wiki markup with the prefix as first line, [~name] mention', withEnv(JIRA_DC_ENV, async () => {
+  it('comment (Server/DC, markdown): wiki markup with the prefix as first line, [~name] mention', withEnv(JIRA_DC_ENV, async () => {
     const posted: any[] = [];
     const provider = stubbedJira({
       issueComments: {
@@ -391,11 +403,11 @@ describe('JiraProvider qualification operations', () => {
         },
       },
     });
-    await provider.postComment('ACME-1', 'Prefix line\n\n- **one**', { mention: { id: 'ann', displayName: null } });
+    await provider.postComment('ACME-1', 'Prefix line\n\n- **one**', { mention: { id: 'ann', displayName: null }, mentionLabel: 'Pour : ' });
     expect(posted[0].comment).to.equal('Prefix line\n\nPour : [~ann]\n\n* *one*');
   }));
 
-  it('[J12][J42][J35] transition: matches the target status by name, untranslated name or id, never the transition name', withEnv(JIRA_ENV, async () => {
+  it('transition: matches the target status by name, untranslated name or id, never the transition name', withEnv(JIRA_ENV, async () => {
     const done: any[] = [];
     const transitions = [
       { id: '11', name: 'Prêt', to: { id: '3', name: 'En cours', untranslatedName: 'In Progress' } },
@@ -417,7 +429,7 @@ describe('JiraProvider qualification operations', () => {
     expect(done).to.have.length(2);
   }));
 
-  it('[J55] points: customfield id required, writes only an empty field, overwrite on demand, absent field skipped', withEnv(JIRA_ENV, async () => {
+  it('points: customfield id required, writes only an empty field, overwrite on demand, absent field skipped', withEnv(JIRA_ENV, async () => {
     const edits: any[] = [];
     let current: any = { customfield_10016: null };
     const provider = stubbedJira({
@@ -462,7 +474,7 @@ describe('JiraProvider qualification operations', () => {
     });
   }));
 
-  it('[J14][J46] errors: a refused credential is TicketProviderNotConfigured, the JSON errors of JIRA are kept', withEnv(JIRA_ENV, async () => {
+  it('errors: a refused credential is TicketProviderNotConfigured, the JSON errors of JIRA are kept', withEnv(JIRA_ENV, async () => {
     const refused = stubbedJira({ myself: { getCurrentUser: async () => { throw httpError(401); } } });
     expect((await rejectionOf(refused.whoAmI())).name).to.equal(TICKET_ERROR.providerNotConfigured);
     const invalid = stubbedJira({
@@ -495,7 +507,7 @@ const workItem = (id: number, project = 'CRM', extra: any = {}) => ({
 });
 
 describe('AzureBoardsProvider qualification operations', () => {
-  it('[A15] list: WIQL bounded to the projects, then batch; results outside the projects dropped', withEnv(AZURE_ENV, async () => {
+  it('list: WIQL bounded to the projects, then batch; results outside the projects dropped', withEnv(AZURE_ENV, async () => {
     const queries: any[] = [];
     const provider = stubbedAzure({
       queryByWiql: async (wiql: any, team: any, _precision: any, top: number) => {
@@ -526,7 +538,7 @@ describe('AzureBoardsProvider qualification operations', () => {
     expect(result.warning).to.contain('Code');
   }));
 
-  it('[A16] list: a 5xx on the WIQL is retried once', withEnv(AZURE_ENV, async () => {
+  it('list: a 5xx on the WIQL is retried once', withEnv(AZURE_ENV, async () => {
     let calls = 0;
     const provider = stubbedAzure({
       queryByWiql: async () => {
@@ -550,7 +562,7 @@ describe('AzureBoardsProvider qualification operations', () => {
     expect(calls).to.equal(2);
   }));
 
-  it('[A18] get: project of the work item itself, comments read there, ids of assignee and authors', withEnv(AZURE_ENV, async () => {
+  it('get: project of the work item itself, comments read there, ids of assignee and authors', withEnv(AZURE_ENV, async () => {
     const commentProjects: string[] = [];
     const provider = stubbedAzure({
       getWorkItem: async () => workItem(5, 'CRM'),
@@ -567,7 +579,7 @@ describe('AzureBoardsProvider qualification operations', () => {
     expect(isTicketMarked({ labels: details!.labels, comments: details!.comments.map((c) => ({ authorId: c.authorId!, body: c.body })), myId: 'me-guid', prefix: PREFIX })).to.equal(true);
   }));
 
-  it('[A20] comment: HTML body on the work item project, text escaped, Azure refuses --visibility', withEnv(AZURE_ENV, async () => {
+  it('comment: HTML body on the work item project, text escaped, Azure refuses --visibility', withEnv(AZURE_ENV, async () => {
     const posted: any[] = [];
     const provider = stubbedAzure({
       getWorkItem: async () => workItem(5, 'CRM'),
@@ -576,7 +588,7 @@ describe('AzureBoardsProvider qualification operations', () => {
         return { id: 99 };
       },
     });
-    const result = await provider.postComment('AB-5', `${PREFIX}\n\nGrid <script>alert(1)</script>`, { mention: { id: GUID, displayName: 'Ann' } });
+    const result = await provider.postComment('AB-5', `${PREFIX}\n\nGrid <script>alert(1)</script>`, { mention: { id: GUID, displayName: 'Ann' }, mentionLabel: 'Pour : ' });
     expect(result.commentId).to.equal('99');
     expect(posted[0]).to.include({ project: 'CRM', id: 5 });
     // The mention goes right after the first block (the prefix), and the script is stripped
@@ -586,7 +598,7 @@ describe('AzureBoardsProvider qualification operations', () => {
     expect(posted).to.have.length(1);
   }));
 
-  it('[A22][A8] label: json-patch with rev test, existing tags kept, no duplicate (any case)', withEnv(AZURE_ENV, async () => {
+  it('label: json-patch with rev test, existing tags kept, no duplicate (any case)', withEnv(AZURE_ENV, async () => {
     const patches: any[] = [];
     const provider = stubbedAzure({
       getWorkItem: async () => workItem(5, 'CRM', { 'System.Tags': 'existing; IA-Qualifie' }),
@@ -604,7 +616,7 @@ describe('AzureBoardsProvider qualification operations', () => {
     ]);
   }));
 
-  it("[A23] transition: checked against the type's states, without case", withEnv(AZURE_ENV, async () => {
+  it("transition: checked against the type's states, without case", withEnv(AZURE_ENV, async () => {
     const patches: any[] = [];
     const provider = stubbedAzure({
       getWorkItem: async () => workItem(5),
@@ -620,7 +632,7 @@ describe('AzureBoardsProvider qualification operations', () => {
     expect(patches).to.have.length(1);
   }));
 
-  it('[A26][A27] points: field found on the type, never overwrites, a type without the field is skipped', withEnv(AZURE_ENV, async () => {
+  it('points: field found on the type, never overwrites, a type without the field is skipped', withEnv(AZURE_ENV, async () => {
     const patches: any[] = [];
     let fields: any = {};
     let typeFields = [{ referenceName: 'Microsoft.VSTS.Scheduling.Effort' }];
@@ -640,14 +652,14 @@ describe('AzureBoardsProvider qualification operations', () => {
     expect(patches).to.have.length(1);
   }));
 
-  it('[A13] whoami: connectionData identity', withEnv(AZURE_ENV, async () => {
+  it('whoami: connectionData identity', withEnv(AZURE_ENV, async () => {
     const provider = stubbedAzure({}, {
       connect: async () => ({ authenticatedUser: { id: GUID, providerDisplayName: 'Bot', properties: { Account: { $value: 'bot@acme.com' } } } }),
     });
     expect(await provider.whoAmI()).to.deep.equal({ id: GUID, displayName: 'Bot', email: 'bot@acme.com' });
   }));
 
-  it('[A14] projects and meta.statusesByType, disabled types left out, missing states completed', withEnv(AZURE_ENV, async () => {
+  it('projects and meta.statusesByType, disabled types left out, missing states completed', withEnv(AZURE_ENV, async () => {
     const provider = stubbedAzure(
       {
         getWorkItemTypes: async () => [
@@ -666,7 +678,7 @@ describe('AzureBoardsProvider qualification operations', () => {
     expect(meta.issueTypes.map((type) => type.name)).to.deep.equal(['User Story', 'Bug']);
   }));
 
-  it('[A24] a refused credential (203 HTML sign-in page) is an auth error, the page is not echoed', withEnv(AZURE_ENV, async () => {
+  it('a refused credential (203 HTML sign-in page) is an auth error, the page is not echoed', withEnv(AZURE_ENV, async () => {
     const provider = stubbedAzure({}, {
       connect: async () => {
         throw new Error('Unexpected token < in JSON: <!DOCTYPE html><html><body>Sign in secret-page</body></html>');
@@ -677,7 +689,7 @@ describe('AzureBoardsProvider qualification operations', () => {
     expect(error.message).to.not.contain('secret-page');
   }));
 
-  it('[A7] an identifier that is not a work item id is refused before any call', withEnv(AZURE_ENV, async () => {
+  it('an identifier that is not a work item id is refused before any call', withEnv(AZURE_ENV, async () => {
     let called = false;
     const provider = stubbedAzure({
       getWorkItem: async () => {
@@ -774,7 +786,7 @@ describe('ticket post-comment / get / label / whoami / meta commands', () => {
     '--allowed-projects', 'ACME', '--agent',
   ];
 
-  it('[J9][A20][A30][J56] post-comment: checks, then comment, label, status, points, in that order; prefix first, mention from the ticket', async () => {
+  it('post-comment: checks, then comment, label, status, points, in that order; prefix first, mention from the ticket', async () => {
     const fake = fakeProvider();
     use(fake);
     const result: any = await TicketPostComment.run(fullArgs());
@@ -790,7 +802,7 @@ describe('ticket post-comment / get / label / whoami / meta commands', () => {
     expect(result.results[0].points.status).to.equal('done');
   });
 
-  it('[J10][A20] post-comment: an already marked ticket is skipped (TicketAlreadyMarked), nothing is written, exit code 0', async () => {
+  it('post-comment: an already marked ticket is skipped (TicketAlreadyMarked), nothing is written, exit code 0', async () => {
     for (const fake of [
       fakeProvider({ labels: ['IA-QUALIFIE'] }),
       fakeProvider({ comments: [{ author: 'Bot', authorId: 'me', date: '', body: `${PREFIX}\n\nold` }] }),
@@ -810,7 +822,7 @@ describe('ticket post-comment / get / label / whoami / meta commands', () => {
     expect(result.results[0].action).to.equal('created');
   });
 
-  it('[J15][A19] post-comment: a ticket outside --allowed-projects is refused (TicketOutOfScope), nothing written', async () => {
+  it('post-comment: a ticket outside --allowed-projects is refused (TicketOutOfScope), nothing written', async () => {
     const fake = fakeProvider({ project: 'OTHER' });
     use(fake);
     process.exitCode = undefined;
@@ -822,7 +834,7 @@ describe('ticket post-comment / get / label / whoami / meta commands', () => {
     process.exitCode = undefined;
   });
 
-  it('[contract] post-comment: a failed status or points step keeps the comment and is reported per step', async () => {
+  it('post-comment: a failed status or points step keeps the comment and is reported per step', async () => {
     const fake = fakeProvider({ failTransition: true, failPoints: true });
     use(fake);
     const result: any = await TicketPostComment.run(fullArgs());
@@ -832,7 +844,7 @@ describe('ticket post-comment / get / label / whoami / meta commands', () => {
     expect(result.results[0].points.status).to.equal('failed');
   });
 
-  it('[contract] post-comment: a label failure after the comment fails the ticket, saying the comment is saved', async () => {
+  it('post-comment: a label failure after the comment fails the ticket, saying the comment is saved', async () => {
     const fake = fakeProvider();
     fake.provider.addTicketLabel = async () => {
       fake.calls.push('label');
@@ -846,7 +858,7 @@ describe('ticket post-comment / get / label / whoami / meta commands', () => {
     process.exitCode = undefined;
   });
 
-  it('[J55] post-comment: on JIRA, --points without a customfield id is refused before the comment', async () => {
+  it('post-comment: on JIRA, --points without a customfield id is refused before the comment', async () => {
     const fake = fakeProvider();
     use(fake);
     const result: any = await TicketPostComment.run(['--id', 'ACME-1', '--message', 'x', '--points', '3', '--agent']);
@@ -873,7 +885,7 @@ describe('ticket post-comment / get / label / whoami / meta commands', () => {
     expect(result).to.deep.equal({ provider: 'jira', id: 'me', displayName: 'Bot', email: null });
   });
 
-  it('[J11][A22] label: adds the label alone; a ticket outside --allowed-projects is refused, nothing written', async () => {
+  it('label: adds the label alone; a ticket outside --allowed-projects is refused, nothing written', async () => {
     const fake = fakeProvider();
     use(fake);
     const result: any = await TicketLabel.run(['--id', 'acme-1', '--label', 'ia-qualif-erreur', '--allowed-projects', 'ACME', '--agent']);
@@ -891,7 +903,7 @@ describe('ticket post-comment / get / label / whoami / meta commands', () => {
     await rejectionOf(() => TicketLabel.run(['--id', 'ACME-1', '--label', 'two words', '--agent']));
   });
 
-  it('[A5] get --id a,b,c: one entry per id in the order asked, a failure never stops the others, exit 1 only when none is read', async () => {
+  it('get --id a,b,c: one entry per id in the order asked, a failure never stops the others, exit 1 only when none is read', async () => {
     const originalGet = TicketProvider.getTicketDetails;
     const fake = fakeProvider();
     use(fake);
@@ -931,21 +943,21 @@ describe('ticket post-comment / get / label / whoami / meta commands', () => {
     }
   });
 
-  it('[A14] get without --allowed-projects still returns the project (setup: project of a known work item)', async () => {
+  it('get without --allowed-projects still returns the project (setup: project of a known work item)', async () => {
     const originalGet = TicketProvider.getTicketDetails;
-    const fake = fakeProvider({ project: 'DSI' });
+    const fake = fakeProvider({ project: 'Backlog' });
     use(fake);
     TicketProvider.getTicketDetails = async () => fake.provider.getTicketDetails();
     try {
       const result: any = await TicketGet.run(['--id', 'ACME-1', '--skip-comments', '--skip-attachments', '--agent']);
-      expect(result.ticket.project).to.equal('DSI');
+      expect(result.ticket.project).to.equal('Backlog');
       expect(result.ticket.markedByMe).to.equal(null);
     } finally {
       TicketProvider.getTicketDetails = originalGet;
     }
   });
 
-  it('[J21] meta: a project outside --allowed-projects is refused before any call', async () => {
+  it('meta: a project outside --allowed-projects is refused before any call', async () => {
     let resolved = false;
     TicketProvider.resolveProvider = async () => {
       resolved = true;
@@ -956,7 +968,7 @@ describe('ticket post-comment / get / label / whoami / meta commands', () => {
     expect(resolved).to.equal(false);
   });
 
-  it('[J8][A18][A19] get: markedByMe, --allowed-projects and --skip-comments', async () => {
+  it('get: markedByMe, --allowed-projects and --skip-comments', async () => {
     const originalGet = TicketProvider.getTicketDetails;
     const fake = fakeProvider({ comments: [{ author: 'Bot', authorId: 'me', date: '', body: `${PREFIX} x` }] });
     use(fake);
@@ -980,7 +992,7 @@ describe('ticket post-comment / get / label / whoami / meta commands', () => {
 });
 
 describe('stable names of the status and points failures', () => {
-  it('[contract] JIRA: a status no transition leads to, or a move the server refuses, is TicketTransitionInvalid', withEnv(JIRA_ENV, async () => {
+  it('JIRA: a status no transition leads to, or a move the server refuses, is TicketTransitionInvalid', withEnv(JIRA_ENV, async () => {
     const transitions = [{ id: '11', name: 'Start', to: { id: '3', name: 'In Progress' } }];
     const unknown = stubbedJira({ issues: { getTransitions: async () => ({ transitions }) } });
     expect((await rejectionOf(unknown.transitionTicket('ACME-1', 'Done'))).name).to.equal(TICKET_ERROR.transitionInvalid);
@@ -997,7 +1009,7 @@ describe('stable names of the status and points failures', () => {
     expect(error.message).to.contain('Resolution is required');
   }));
 
-  it('[contract] JIRA: no custom field, or a value the server refuses, is TicketPointsInvalid', withEnv(JIRA_ENV, async () => {
+  it('JIRA: no custom field, or a value the server refuses, is TicketPointsInvalid', withEnv(JIRA_ENV, async () => {
     const provider = stubbedJira({
       issues: {
         getIssue: async () => ({ fields: { customfield_10016: null } }),
@@ -1011,7 +1023,7 @@ describe('stable names of the status and points failures', () => {
     expect(() => parseStoryPoints('L')).to.throw().with.property('name', TICKET_ERROR.pointsInvalid);
   }));
 
-  it('[contract] Azure Boards: a state the type does not have, or a patch refused, is TicketTransitionInvalid / TicketPointsInvalid', withEnv(AZURE_ENV, async () => {
+  it('Azure Boards: a state the type does not have, or a patch refused, is TicketTransitionInvalid / TicketPointsInvalid', withEnv(AZURE_ENV, async () => {
     const refusedPatch = () => {
       const error: any = new Error('VS402625: rule failed');
       error.statusCode = 400;

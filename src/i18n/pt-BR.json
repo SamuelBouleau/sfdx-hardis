@@ -4262,6 +4262,7 @@
   "ticketListProviderNotConfigured": "Para listar tickets, é necessário ter um destes sistemas de tickets configurado: {{providers}}",
   "ticketListQueryEmpty": "A consulta está vazia: informe a consulta a ser executada com --query",
   "ticketListWritten": "Lista de tickets gravada em {{file}}",
+  "ticketMentionLead": "Para: ",
   "ticketMetaDone": "Projeto {{project}}: {{types}} tipos de issue, {{statuses}} status.",
   "ticketMetaNotSupported": "{{provider}} não consegue listar projetos, tipos de issue ou status.",
   "ticketMetaProjectsDone": "{{count}} projetos visíveis para as credenciais.",

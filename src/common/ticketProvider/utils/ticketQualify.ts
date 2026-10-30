@@ -354,38 +354,43 @@ export const escapeHtml = (text: string) =>
 // Mentions: always from the assignee read on the same ticket, never from the comment text
 // ---------------------------------------------------------------------------------------------
 
-export const MENTION_LEAD = "Pour : ";
+/** Text before the mention: --mention-label, or else the translation of the CLI language */
+export function mentionLead(label?: string | null): string {
+  return label ?? t("ticketMentionLead");
+}
+
+// The label is caller text: escaped like any other text, it cannot add markup around the mention
+const escapeWiki = (text: string) => text.replace(/[\\[\]{}!~|^+\-_?*#]/g, "\\$&");
 
 const JIRA_CLOUD_ACCOUNT_RE = /^[A-Za-z0-9:_-]+$/;
 const JIRA_SERVER_NAME_RE = /^[A-Za-z0-9._@+-]+$/;
 const AZURE_GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Inserted right after the first block (the prefix). A malformed account id is dropped */
-export function withAdfMention(doc: any, assignee: TicketAssignee | null | undefined): any {
+export function withAdfMention(doc: any, assignee: TicketAssignee | null | undefined, lead = mentionLead()): any {
   if (!assignee || !JIRA_CLOUD_ACCOUNT_RE.test(assignee.id || "")) {
     return doc;
   }
-  const line = {
-    type: "paragraph",
-    content: [{ type: "text", text: MENTION_LEAD }, { type: "mention", attrs: { id: assignee.id, text: `@${assignee.displayName || ""}` } }],
-  };
+  const mention = { type: "mention", attrs: { id: assignee.id, text: `@${assignee.displayName || ""}` } };
+  // ADF refuses an empty text node
+  const line = { type: "paragraph", content: lead ? [{ type: "text", text: lead }, mention] : [mention] };
   return { ...doc, content: [...doc.content.slice(0, 1), line, ...doc.content.slice(1)] };
 }
 
-export function withWikiMention(wiki: string, assignee: TicketAssignee | null | undefined): string {
+export function withWikiMention(wiki: string, assignee: TicketAssignee | null | undefined, lead = mentionLead()): string {
   if (!assignee || !JIRA_SERVER_NAME_RE.test(assignee.id || "")) {
     return wiki;
   }
   const blocks = wiki.split("\n\n");
-  blocks.splice(1, 0, `${MENTION_LEAD}[~${assignee.id}]`);
+  blocks.splice(1, 0, `${escapeWiki(lead)}[~${assignee.id}]`);
   return blocks.join("\n\n");
 }
 
-export function withHtmlMention(html: string, assignee: TicketAssignee | null | undefined): string {
+export function withHtmlMention(html: string, assignee: TicketAssignee | null | undefined, lead = mentionLead()): string {
   if (!assignee || !AZURE_GUID_RE.test(assignee.id || "")) {
     return html;
   }
-  const line = `<p>${MENTION_LEAD}<a href="#" data-vss-mention="version:2.0,${assignee.id}">@${escapeHtml(assignee.displayName || "")}</a></p>`;
+  const line = `<p>${escapeHtml(lead)}<a href="#" data-vss-mention="version:2.0,${assignee.id}">@${escapeHtml(assignee.displayName || "")}</a></p>`;
   const end = html.search(/<\/(p|h\d|ul|ol)>/);
   if (end < 0) {
     return line + html;

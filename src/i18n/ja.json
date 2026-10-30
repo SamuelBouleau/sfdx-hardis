@@ -4293,6 +4293,7 @@
   "ticketListProviderNotConfigured": "チケットを一覧表示するには、次のいずれかのチケットシステムが構成されている必要があります: {{providers}}",
   "ticketListQueryEmpty": "クエリが空です。--query で実行するクエリを指定してください",
   "ticketListWritten": "チケット一覧を {{file}} に書き込みました",
+  "ticketMentionLead": "宛先: ",
   "ticketMetaDone": "プロジェクト {{project}}: 課題タイプ {{types}} 件、ステータス {{statuses}} 件。",
   "ticketMetaNotSupported": "{{provider}} ではプロジェクト、課題タイプ、ステータスを一覧表示できません。",
   "ticketMetaProjectsDone": "認証情報で参照できるプロジェクトは {{count}} 件です。",

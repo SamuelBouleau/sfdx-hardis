@@ -4296,6 +4296,7 @@
   "ticketListProviderNotConfigured": "Per elencare i ticket è necessario che sia configurato uno di questi sistemi di ticketing: {{providers}}",
   "ticketListQueryEmpty": "La query è vuota: passa la query da eseguire con --query",
   "ticketListWritten": "Elenco dei ticket scritto in {{file}}",
+  "ticketMentionLead": "Per: ",
   "ticketMetaDone": "Progetto {{project}}: {{types}} tipi di issue, {{statuses}} stati.",
   "ticketMetaNotSupported": "{{provider}} non può elencare progetti, tipi di issue o stati.",
   "ticketMetaProjectsDone": "{{count}} progetti visibili con le credenziali.",

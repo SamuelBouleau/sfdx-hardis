@@ -4296,6 +4296,7 @@
   "ticketListProviderNotConfigured": "Le listage des tickets nécessite qu'un de ces systèmes de tickets soit configuré : {{providers}}",
   "ticketListQueryEmpty": "La requête est vide : indiquez la requête à exécuter avec --query",
   "ticketListWritten": "Liste des tickets écrite dans {{file}}",
+  "ticketMentionLead": "Pour : ",
   "ticketMetaDone": "Projet {{project}} : {{types}} types de ticket, {{statuses}} statuts.",
   "ticketMetaNotSupported": "{{provider}} ne sait pas lister les projets, types de ticket ou statuts.",
   "ticketMetaProjectsDone": "{{count}} projets visibles avec ces identifiants.",

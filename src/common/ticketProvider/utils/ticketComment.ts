@@ -21,6 +21,8 @@ export interface PostCommentOptions {
   serviceNowField?: string;
   /** Real mention of this assignee, inserted right after the first block (JIRA, Azure Boards) */
   mention?: TicketAssignee | null;
+  /** Text before the mention. Defaults to the translation of ticketMentionLead in the language of the CLI */
+  mentionLabel?: string | null;
   /** JIRA only: comment restricted to a project role or a group */
   visibility?: TicketCommentVisibility | null;
   /** The markdown went through toStrictMarkdown: Azure Boards adds the spacing its comment view drops */

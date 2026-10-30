@@ -4296,6 +4296,7 @@
   "ticketListProviderNotConfigured": "Aby wyświetlić listę zgłoszeń, wymagane jest skonfigurowanie jednego z tych systemów zgłoszeń: {{providers}}",
   "ticketListQueryEmpty": "Zapytanie jest puste: należy podać zapytanie do wykonania za pomocą --query",
   "ticketListWritten": "Listę zgłoszeń zapisano w {{file}}",
+  "ticketMentionLead": "Do: ",
   "ticketMetaDone": "Projekt {{project}}: {{types}} typów zgłoszeń, {{statuses}} statusów.",
   "ticketMetaNotSupported": "{{provider}} nie potrafi wyświetlić listy projektów, typów zgłoszeń ani statusów.",
   "ticketMetaProjectsDone": "{{count}} projektów widocznych dla poświadczeń.",

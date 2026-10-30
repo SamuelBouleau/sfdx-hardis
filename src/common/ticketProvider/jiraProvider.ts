@@ -47,6 +47,7 @@ import {
   TicketProjectSummary,
   TicketStepResult,
   isProjectAllowed,
+  mentionLead,
   retryReadOn5xx,
   scopeJql,
   withAdfMention,
@@ -1009,8 +1010,8 @@ export class JiraProvider extends TicketProviderRoot {
     const fullMarkdown = markdown + markdownMarkerFooter(options.marker);
     // The mention comes from the assignee read on the ticket by the caller, never from the text
     const body: any = this.isJiraCloud()
-      ? withAdfMention(markdownToAdf(fullMarkdown), options.mention)
-      : withWikiMention(markdownToJiraWiki(fullMarkdown), options.mention);
+      ? withAdfMention(markdownToAdf(fullMarkdown), options.mention, mentionLead(options.mentionLabel))
+      : withWikiMention(markdownToJiraWiki(fullMarkdown), options.mention, mentionLead(options.mentionLabel));
     const visibility = options.visibility ? { visibility: { type: options.visibility.type, value: options.visibility.value } } : {};
     const existing = options.marker ? await this.findMarkedComment(issueKey, options.marker) : null;
     // jira.js reads the text from `comment`, except the v3 update which reads `body`: both are given

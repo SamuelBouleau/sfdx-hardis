@@ -4296,6 +4296,7 @@
   "ticketListProviderNotConfigured": "Om tickets weer te geven moet een van deze ticketsystemen zijn geconfigureerd: {{providers}}",
   "ticketListQueryEmpty": "De query is leeg: geef de uit te voeren query op met --query",
   "ticketListWritten": "Ticketlijst geschreven naar {{file}}",
+  "ticketMentionLead": "Voor: ",
   "ticketMetaDone": "Project {{project}}: {{types}} issuetypes, {{statuses}} statussen.",
   "ticketMetaNotSupported": "{{provider}} kan geen projecten, issuetypes of statussen weergeven.",
   "ticketMetaProjectsDone": "{{count}} projecten zichtbaar voor de inloggegevens.",

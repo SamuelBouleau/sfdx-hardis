@@ -4295,6 +4295,7 @@
   "ticketListProviderNotConfigured": "Zum Auflisten von Tickets muss eines dieser Ticketsysteme konfiguriert sein: {{providers}}",
   "ticketListQueryEmpty": "Die Abfrage ist leer: Geben Sie die auszuführende Abfrage mit --query an",
   "ticketListWritten": "Ticketliste geschrieben nach {{file}}",
+  "ticketMentionLead": "Für: ",
   "ticketMetaDone": "Projekt {{project}}: {{types}} Issue-Typen, {{statuses}} Status.",
   "ticketMetaNotSupported": "{{provider}} kann keine Projekte, Issue-Typen oder Status auflisten.",
   "ticketMetaProjectsDone": "{{count}} Projekte sind für die Zugangsdaten sichtbar.",

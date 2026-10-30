@@ -44,6 +44,7 @@ import {
   TicketProjectSummary,
   TicketStepResult,
   isProjectAllowed,
+  mentionLead,
   retryReadOn5xx,
   scopeWiql,
   splitTags,
@@ -702,7 +703,7 @@ export class AzureBoardsProvider extends TicketProviderRoot {
     }
     // The mention comes from the assignee read on the work item by the caller, never from the text
     const converted = await convertMarkdownToHtml(markdown);
-    const html = withHtmlMention(options.strictMarkdown ? withHtmlHeadingSpacers(converted) : converted, options.mention) + htmlMarker(options.marker);
+    const html = withHtmlMention(options.strictMarkdown ? withHtmlHeadingSpacers(converted) : converted, options.mention, mentionLead(options.mentionLabel)) + htmlMarker(options.marker);
     const azureWorkItemApi = await this.azureApi.getWorkItemTrackingApi(this.serverUrl || "");
     // The work item's own project: commenting through the project of the repository fails when they differ
     const workItemProject: any = await retryReadOn5xx(() => azureWorkItemApi.getWorkItem(workItemId, ["System.TeamProject"]));

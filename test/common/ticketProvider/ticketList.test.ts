@@ -8,8 +8,7 @@ import { TICKET_ERROR } from '../../../src/common/ticketProvider/utils/ticketOpe
 
 /*
  * ticket list (JIRA Cloud cursor, Server / Data Center offsets), provider resolution without an
- * identifier, and the operations a connector does not support. Ported from the
- * feat/jira-autopilot-ticket-commands branch, which never reached main.
+ * identifier, and the operations a connector does not support.
  */
 
 function withEnv(vars: Record<string, string>, run: () => Promise<void>): () => Promise<void> {

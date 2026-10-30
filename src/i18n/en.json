@@ -4300,6 +4300,7 @@
   "ticketListProviderNotConfigured": "Listing tickets needs one of these ticketing systems to be configured: {{providers}}",
   "ticketListQueryEmpty": "The query is empty: pass the query to run with --query",
   "ticketListWritten": "Ticket list written to {{file}}",
+  "ticketMentionLead": "For: ",
   "ticketMetaDone": "Project {{project}}: {{types}} issue types, {{statuses}} statuses.",
   "ticketMetaNotSupported": "{{provider}} cannot list projects, issue types or statuses.",
   "ticketMetaProjectsDone": "{{count}} projects visible to the credentials.",

@@ -20,7 +20,7 @@ An AI agent can report what it designed or tested on the ticket it worked on, a 
 Options meant for an agent that reviews a backlog. Each ticket goes through the same steps, in this order:
 
 1. **Checks, before any write:** `--allowed-projects a,b` leaves a ticket of another project untouched (action `refused`, `errorName: TicketOutOfScope`). `--skip-if-marked` leaves untouched a ticket that carries `--marker-label` (default `--label`), or a comment of the authenticated account starting with `--prefix` (action `skipped`, `errorName: TicketAlreadyMarked`): it is neither commented nor updated, even with `--marker`. Comments of other accounts never count.
-2. **Comment**, with `--prefix` as its first line (never twice), `--mention-assignee` adding a real mention of the assignee read on the ticket (never taken from the text; nothing when unassigned), and `--visibility role:<role>` or `group:<group>` restricting it on JIRA (refused on Azure Boards).
+2. **Comment**, with `--prefix` as its first line (never twice), `--mention-assignee` adding a real mention of the assignee read on the ticket (never taken from the text; nothing when unassigned), introduced by `--mention-label` or by a translation in the language of the CLI, and `--visibility role:<role>` or `group:<group>` restricting it on JIRA (refused on Azure Boards).
 3. **Label** (`--label`), added on top of the existing ones. If it cannot be added, the result is `failed` although the comment is saved: add the label only, do not post again.
 4. **Status** (`--transition`): the target status, by name, untranslated name or id, never the name of the transition.
 5. **Story points** (`--points`): a filled value is kept unless `--overwrite-points`. JIRA needs `--points-field customfield_NNNNN`; Azure Boards finds the field on the work item type (StoryPoints, then Effort, then Size), or takes `--points-field`. A type without the field is `skipped`, not an error.
@@ -87,6 +87,7 @@ The same applies in CI.
 |marker|option|Key of the comment: a rerun with the same marker updates the comment it posted before instead of adding one||||
 |marker-label|option|Label checked by --skip-if-marked. Defaults to --label||||
 |mention-assignee|boolean|Mention the assignee read on the ticket, under the first line of the comment (JIRA, Azure Boards)||||
+|mention-label|option|Text written before the mention of --mention-assignee. Defaults to a translation in the language of the CLI (SFDX_HARDIS_LANG)||||
 |message<br/>-m|option|Comment to post, in markdown||||
 |overwrite-points|boolean|Replace story points that are already filled||||
 |points|option|Story points written once the comment is posted. A filled value is kept unless --overwrite-points||||
