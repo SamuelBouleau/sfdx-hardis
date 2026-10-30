@@ -267,6 +267,7 @@
 | [**hardis:ticket:attach**](hardis/ticket/attach.md)   |       |
 | [**hardis:ticket:comment**](hardis/ticket/comment.md) |       |
 | [**hardis:ticket:get**](hardis/ticket/get.md)         |       |
+| [**hardis:ticket:label**](hardis/ticket/label.md)     |       |
 | [**hardis:ticket:list**](hardis/ticket/list.md)       |       |
 | [**hardis:ticket:meta**](hardis/ticket/meta.md)       |       |
 | [**hardis:ticket:whoami**](hardis/ticket/whoami.md)   |       |

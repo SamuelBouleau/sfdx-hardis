@@ -28,6 +28,7 @@ import TicketComment from '../../../src/commands/hardis/ticket/comment.js';
 import TicketGet from '../../../src/commands/hardis/ticket/get.js';
 import TicketMeta from '../../../src/commands/hardis/ticket/meta.js';
 import TicketWhoami from '../../../src/commands/hardis/ticket/whoami.js';
+import TicketLabel from '../../../src/commands/hardis/ticket/label.js';
 
 /*
  * Port of the acceptance tests of the cloudity-qualify-ticket adapters (providers/jira.mjs and
@@ -796,6 +797,38 @@ describe('ticket comment / get / whoami / meta commands', () => {
     use(fake);
     const result: any = await TicketWhoami.run(['--agent']);
     expect(result).to.deep.equal({ provider: 'jira', id: 'me', displayName: 'Bot', email: null });
+  });
+
+  it('[J11][A22] label: adds the label alone; a ticket outside --allowed-projects is refused, nothing written', async () => {
+    const fake = fakeProvider();
+    use(fake);
+    const result: any = await TicketLabel.run(['--id', 'acme-1', '--label', 'ia-qualif-erreur', '--allowed-projects', 'ACME', '--agent']);
+    expect(fake.calls).to.deep.equal(['get', 'label']);
+    expect(result).to.deep.equal({ provider: 'jira', ticket: 'ACME-1', label: { status: 'done', value: 'ia-qualif-erreur' } });
+    const outside = fakeProvider({ project: 'OTHER' });
+    use(outside);
+    const error = await rejectionOf(() => TicketLabel.run(['--id', 'ACME-1', '--label', 'x', '--allowed-projects', 'ACME', '--agent']));
+    expect(error.name).to.equal(TICKET_ERROR.outOfScope);
+    expect(outside.calls).to.deep.equal(['get']);
+    const plain = fakeProvider();
+    use(plain);
+    await TicketLabel.run(['--id', 'ACME-1', '--label', 'x', '--agent']);
+    expect(plain.calls).to.deep.equal(['label']);
+    await rejectionOf(() => TicketLabel.run(['--id', 'ACME-1', '--label', 'two words', '--agent']));
+  });
+
+  it('[A14] get without --allowed-projects still returns the project (setup: project of a known work item)', async () => {
+    const originalGet = TicketProvider.getTicketDetails;
+    const fake = fakeProvider({ project: 'DSI' });
+    use(fake);
+    TicketProvider.getTicketDetails = async () => fake.provider.getTicketDetails();
+    try {
+      const result: any = await TicketGet.run(['--id', 'ACME-1', '--skip-comments', '--skip-attachments', '--agent']);
+      expect(result.ticket.project).to.equal('DSI');
+      expect(result.ticket.markedByMe).to.equal(null);
+    } finally {
+      TicketProvider.getTicketDetails = originalGet;
+    }
   });
 
   it('[J21] meta: a project outside --allowed-projects is refused before any call', async () => {
