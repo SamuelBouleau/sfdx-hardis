@@ -462,6 +462,8 @@ nav:
           - comment: hardis/ticket/comment.md
           - get: hardis/ticket/get.md
           - list: hardis/ticket/list.md
+          - meta: hardis/ticket/meta.md
+          - whoami: hardis/ticket/whoami.md
       - hardis:work:
           - new: hardis/work/new.md
           - refresh: hardis/work/refresh.md

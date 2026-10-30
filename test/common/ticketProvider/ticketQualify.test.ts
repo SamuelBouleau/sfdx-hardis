@@ -33,7 +33,7 @@ import TicketWhoami from '../../../src/commands/hardis/ticket/whoami.js';
  * Port of the acceptance tests of the cloudity-qualify-ticket adapters (providers/jira.mjs and
  * azure.mjs, commit 5da3b01). Each test name starts with the baseline test it covers: [J<n>] for
  * jira.test.mjs, [A<n>] for azure.test.mjs, numbered in file order. The mapping, including the
- * tests that moved to the skill or were dropped, is in docs/ticket-qualify-test-mapping.md.
+ * tests that moved to the skill or were dropped, is in test-mapping.md of the qualify-ticket project folder.
  */
 
 const NO_JIRA_ENV = { JIRA_HOST: '', JIRA_EMAIL: '', JIRA_TOKEN: '', JIRA_PAT: '', JIRA_CLIENT_ID: '', JIRA_CLIENT_SECRET: '' };
@@ -730,7 +730,7 @@ describe('ticket comment / get / whoami / meta commands', () => {
     '--allowed-projects', 'ACME', '--agent',
   ];
 
-  it('[J9][A20] comment: checks, then comment, label, status, points, in that order; prefix first, mention from the ticket', async () => {
+  it('[J9][A20][A30][J56] comment: checks, then comment, label, status, points, in that order; prefix first, mention from the ticket', async () => {
     const fake = fakeProvider();
     use(fake);
     const result: any = await TicketComment.run(fullArgs());
@@ -763,7 +763,7 @@ describe('ticket comment / get / whoami / meta commands', () => {
     expect(fake.calls).to.deep.equal(['get']);
   });
 
-  it('[A25] comment: a failed status or points step keeps the comment and is reported per step', async () => {
+  it('[contract] comment: a failed status or points step keeps the comment and is reported per step', async () => {
     const fake = fakeProvider({ failTransition: true, failPoints: true });
     use(fake);
     const result: any = await TicketComment.run(fullArgs());
@@ -791,7 +791,7 @@ describe('ticket comment / get / whoami / meta commands', () => {
     expect(result.points.status).to.equal('not-requested');
   });
 
-  it('[J57] comment: no secret reaches a step error; [J52] whoami returns the identity', async () => {
+  it('whoami returns the provider and the identity', async () => {
     const fake = fakeProvider();
     use(fake);
     const result: any = await TicketWhoami.run(['--agent']);
